@@ -959,15 +959,26 @@
           <div class="mt-6 h-12 w-full rounded-xl bg-brand-light"></div>
         </div>`,
 
-      service: (s, txt, orderLabel) => `
-        <article class="card u-lift flex cursor-pointer flex-col p-7" data-service="${esc(s.id)}">
-          <div class="card-icon mb-5">
-            <svg width="24" height="24" ${SVG_ATTR}>${ICONS[s.icon] || ICONS.default}</svg>
-          </div>
+      // Card with a 16:9 cover (image_url). Without an image the card keeps the classic icon header.
+      // The gradient + big icon sit behind the <img>, so they show only while it loads or if it fails (onerror removes the <img>).
+      service: (s, txt, orderLabel) => {
+        const icon = `<svg width="24" height="24" ${SVG_ATTR}>${ICONS[s.icon] || ICONS.default}</svg>`;
+        const img = safeUrl(s.image);
+        const head = img
+          ? `<div class="relative -mx-7 -mt-7 mb-5 aspect-[16/9] overflow-hidden rounded-t-[15px] bg-gradient-to-br from-brand-light via-white to-blue-200">
+               <span class="absolute inset-0 grid place-items-center text-brand/30 [&>svg]:h-14 [&>svg]:w-14" aria-hidden="true">${icon}</span>
+               <img src="${esc(img)}" alt="" width="640" height="360" loading="lazy" decoding="async" class="relative h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105" onerror="this.remove()">
+               <span class="card-icon absolute bottom-3 start-3 !h-11 !w-11 bg-white/95 shadow-md" aria-hidden="true">${icon}</span>
+             </div>`
+          : `<div class="card-icon mb-5">${icon}</div>`;
+        return `
+        <article class="card group u-lift flex cursor-pointer flex-col p-7" data-service="${esc(s.id)}">
+          ${head}
           <h3 class="card-title">${esc(txt.title)}</h3>
           <p class="card-text mt-2 flex-1">${esc(txt.desc)}</p>
           <button type="button" class="btn btn-primary u-press u-rise mt-6" data-service="${esc(s.id)}">${esc(orderLabel)}</button>
-        </article>`,
+        </article>`;
+      },
 
       timelineItem: (t) => `
         <li class="relative">
@@ -1216,19 +1227,19 @@
     const modal = $('#service-modal');
     const findService = (id) => state.services.find((s) => String(s.id) === String(id));
 
-    function mediaMarkup(service, title, d) {
-      const v = parseVideo(service.video);
+    function mediaMarkup(service, title) {
+      const v = parseVideo(service.video);      // null when video_url is empty or is not a YouTube / mp4 / webm link
+      const img = safeUrl(service.image);
       if (v && v.kind === 'youtube') {
         return `<iframe class="modal-frame" src="${esc(v.src)}" title="${esc(title)}" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
       }
       if (v && v.kind === 'file') {
-        return `<video class="modal-frame" src="${esc(v.src)}" controls playsinline preload="metadata"></video>`;
+        return `<video class="modal-frame" src="${esc(v.src)}" ${img ? `poster="${esc(img)}"` : ''} controls playsinline preload="metadata"></video>`;
       }
-      const img = safeUrl(service.image);
-      return `<div class="modal-placeholder">
-        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M10 8.5l6 3.5-6 3.5z" fill="currentColor"/></svg>
-        <span class="text-sm font-medium">${esc(d.ui.videoSoon)}</span></div>`
-        + (img ? `<img class="modal-img" src="${esc(img)}" alt="${esc(title)}" loading="lazy" onerror="this.remove()">` : '');
+      // No usable video: the featured image becomes the banner. The icon banner behind it has no "video soon" text
+      // and only shows when there is no image at all, or when the image fails to load (onerror removes the <img>).
+      return `<div class="modal-placeholder" aria-hidden="true"><svg width="64" height="64" ${SVG_ATTR}>${ICONS[service.icon] || ICONS.default}</svg></div>`
+        + (img ? `<img class="modal-img" src="${esc(img)}" alt="${esc(title)}" decoding="async" fetchpriority="high" onerror="this.remove()">` : '');
     }
 
     // Real visitor counter
@@ -1281,7 +1292,7 @@
       const d = dict(current);
       modalState.serviceId = service.id;
       Object.assign(fb, { status: 'loading', items: [], panel: compose ? 'compose' : 'closed', consent: compose, draft: '', sending: false, notice: '', error: '' });
-      $('#modal-media').innerHTML = mediaMarkup(service, serviceText(service).title, d);
+      $('#modal-media').innerHTML = mediaMarkup(service, serviceText(service).title);
       shownCount = 0;
       renderModalText(d);
       showCount(state.visits, true);

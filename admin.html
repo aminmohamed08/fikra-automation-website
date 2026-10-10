@@ -281,7 +281,7 @@
           { k: 'description_ar', l: 'الوصف (عربي)', t: 'area', rtl: 1, wide: 1 },
           { k: 'icon', l: 'الأيقونة', t: 'select', opts: () => ICON_KEYS.map((k) => [k, k]) },
           { k: 'sort_order', l: 'الترتيب', t: 'number', def: () => nextOrder(state.services) },
-          { k: 'image_url', l: 'صورة الخدمة', t: 'media', kind: 'image', wide: 1 },
+          { k: 'image_url', l: 'صورة الخدمة (تظهر على البطاقة وفي النافذة؛ يُفضَّل 1280×720 بنسبة 16:9)', t: 'media', kind: 'image', wide: 1 },
           { k: 'video_url', l: 'فيديو توضيحي (رابط YouTube أو ملف mp4 / webm)', t: 'media', kind: 'video', wide: 1 },
           { k: 'is_active', l: 'ظاهرة للزوار', t: 'check', def: true },
         ],
