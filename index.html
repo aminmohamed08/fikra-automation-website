@@ -1,0 +1,1866 @@
+<!DOCTYPE html>
+<html lang="fr" dir="ltr" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fikra Automation</title>
+  <meta name="description" content="Fikra Automation" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Cairo:wght@400;600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { display: ['"Bricolage Grotesque"', 'system-ui', 'sans-serif'], sans: ['"Instrument Sans"', 'system-ui', 'sans-serif'] },
+          colors: { ink: '#0B2545', brand: { DEFAULT: '#1D4ED8', dark: '#1E3A8A', light: '#DBEAFE', mist: '#F3F7FF' } },
+        },
+      },
+    };
+  </script>
+
+  <!-- 1) COMPONENT STYLES (Tailwind @apply): one block per component -->
+  <style type="text/tailwindcss">
+    @layer components {
+      /* Layout */
+      .section        { @apply mx-auto max-w-6xl scroll-mt-16 px-5 py-20 sm:py-24; }
+      .section-title  { @apply font-display text-3xl font-extrabold tracking-tight sm:text-4xl; }
+      .section-sub    { @apply mt-3 max-w-2xl text-lg text-slate-600; }
+
+      /* Buttons */
+      .btn            { @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 font-semibold; }
+      .btn-primary    { @apply bg-brand text-white hover:bg-brand-dark; }
+      .btn-dark       { @apply bg-ink text-white hover:bg-brand-dark; }
+      .btn-outline    { @apply text-brand-dark ring-1 ring-brand/30 hover:bg-white; }
+      .btn-lg         { @apply px-7 py-3.5; }
+
+      /* Cards (services) */
+      .card           { @apply rounded-2xl border border-brand-light bg-white; }
+      .card-icon      { @apply grid h-12 w-12 place-items-center rounded-xl bg-brand-light text-brand; }
+      .card-title     { @apply font-display text-xl font-bold; }
+      .card-text      { @apply leading-relaxed text-slate-600; }
+
+      /* Certificates (always a button: opens the viewer, or a toast when no file exists) */
+      .cert           { @apply flex w-full cursor-pointer flex-col rounded-2xl border border-brand-light bg-white p-6 text-start; }
+      .cert-icon      { @apply mb-4 grid h-12 w-12 place-items-center rounded-xl bg-brand-light text-brand; }
+      .cert-meta      { @apply mt-1 flex-1 text-sm text-slate-600; }
+      .cert-status    { @apply mt-4 inline-flex items-center gap-1.5 text-sm font-semibold; }
+      .cert-on        { @apply text-brand; }
+      .cert-off       { @apply text-slate-500; }
+
+      /* Navbar */
+      .nav-link       { @apply relative; }
+      .lang-toggle    { @apply relative flex rounded-full bg-brand-mist p-1 text-sm font-semibold ring-1 ring-brand-light; }
+      .lang-pill      { @apply absolute inset-y-1 left-1 w-14 rounded-full bg-brand shadow; }
+      .lang-btn       { @apply relative z-10 w-14 rounded-full px-3 py-1.5; }
+
+      /* Hero portrait: frame + chips share ONE positioned wrapper */
+      .portrait       { @apply relative isolate mx-auto w-full max-w-sm lg:max-w-md; }
+      .portrait-frame { @apply relative aspect-[4/5] overflow-hidden rounded-[2rem] bg-gradient-to-br from-brand-light via-white to-blue-200 shadow-2xl shadow-brand/20 ring-1 ring-brand-light; }
+      .portrait-img   { @apply absolute inset-0 h-full w-full object-cover object-top; }
+      .chip           { @apply absolute z-10 flex max-w-[80%] items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold shadow-lg; }
+      .chip-light     { @apply bg-white ring-1 ring-brand-light; }
+      .chip-solid     { @apply bg-brand text-white; }
+      .chip-icon      { @apply grid h-6 w-6 shrink-0 place-items-center rounded-md bg-brand-light text-brand; }
+      .chip-top       { @apply start-3 top-6 sm:-start-6 sm:top-10; }
+      .chip-side      { @apply end-3 top-[46%] sm:-end-6; }
+      .chip-bottom    { @apply bottom-6 start-6 sm:-bottom-4 sm:start-4; }
+
+      /* Timeline */
+      .timeline       { @apply relative space-y-8 border-s-2 border-brand-light ps-8; }
+      .timeline-dot   { @apply absolute -start-[2.6rem] top-1.5 h-4 w-4 rounded-full border-4 border-brand bg-white; }
+
+      /* Footer contact */
+      .contact-link   { @apply flex items-center gap-4 rounded-xl bg-white/10 px-5 py-4 hover:bg-white/20; }
+
+      /* Lead form */
+      .field          { @apply flex flex-col gap-1.5; }
+      .field-label    { @apply text-sm font-semibold text-ink; }
+      .field-input    { @apply w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-ink placeholder:text-slate-400 focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/20; }
+      .field-input[aria-invalid="true"] { @apply border-red-500 focus:border-red-500 focus:ring-red-100; }
+      .field-error    { @apply text-sm font-medium text-red-600; }
+    }
+  </style>
+
+  <!-- 2) MOTION + BEHAVIOUR STYLES (plain CSS; only transform and opacity are animated) -->
+  <style>
+    :root { --ease-out: cubic-bezier(0.16, 1, 0.3, 1); }
+
+    html[lang="ar"] body, html[lang="ar"] .font-display { font-family: 'Cairo', system-ui, sans-serif; }
+    html[lang="ar"] * { letter-spacing: 0 !important; }
+    html[lang="ar"] h1 { line-height: 1.35; }
+
+    @keyframes rise  { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+    @keyframes pop   { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+    @keyframes drift { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    @keyframes spin  { to { transform: rotate(360deg); } }
+    @keyframes faqIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+    @keyframes live  { 0% { transform: scale(1); opacity: .55; } 70%, 100% { transform: scale(2.4); opacity: 0; } }
+
+    /* Page-load sequence: set order with style="--i:N" */
+    .load     { opacity: 0; animation: rise 500ms var(--ease-out) forwards; animation-delay: calc(var(--i, 0) * 90ms + 100ms); }
+    .load-pop { opacity: 0; animation: pop 500ms var(--ease-out) forwards; animation-delay: calc(var(--i, 0) * 90ms + 100ms); }
+    .chip     { opacity: 0; animation: pop 400ms var(--ease-out) forwards, drift 6s ease-in-out infinite; animation-delay: calc(var(--i, 0) * 90ms + 100ms), calc(var(--i, 0) * 90ms + 900ms); }
+
+    /* Interaction helpers (opt-in) */
+    .u-press { transition: transform 180ms var(--ease-out), background-color 180ms ease-out, color 180ms ease-out; }
+    .u-press:active { transform: scale(0.97); }
+    .u-rise:hover { transform: translateY(-2px); }
+    .u-lift { position: relative; transition: transform 250ms var(--ease-out); }
+    .u-lift::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: 0 18px 40px -12px rgba(29,78,216,.28); opacity: 0; transition: opacity 250ms ease-out; pointer-events: none; z-index: -1; }
+    .u-lift:hover { transform: translateY(-4px); }
+    .u-lift:hover::after { opacity: 1; }
+
+    a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 3px solid #93C5FD; outline-offset: 3px; }
+
+    .spinner { display: none; width: 1rem; height: 1rem; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 9999px; }
+    .is-loading .spinner { display: inline-block; animation: spin 700ms linear infinite; }
+    .is-loading { pointer-events: none; opacity: .85; }
+
+    #app { transition: opacity 160ms ease-out; }
+    #app.is-switching { opacity: 0; }
+
+    .nav-link::after { content: ""; position: absolute; inset-inline: 0; bottom: -4px; height: 2px; background: #1D4ED8; transform: scaleX(0); transform-origin: left; transition: transform 250ms var(--ease-out); }
+    [dir="rtl"] .nav-link::after { transform-origin: right; }
+    .nav-link:hover::after, .nav-link:focus-visible::after { transform: scaleX(1); }
+
+    .lang-pill { transition: transform 250ms var(--ease-out); }
+
+    #mobile-menu { opacity: 0; transform: translateY(-8px); pointer-events: none; transition: opacity 200ms ease-out, transform 250ms var(--ease-out); }
+    #mobile-menu.open { opacity: 1; transform: none; pointer-events: auto; }
+
+    .grid-bg { background-image: linear-gradient(#DBEAFE 1px, transparent 1px), linear-gradient(90deg, #DBEAFE 1px, transparent 1px); background-size: 40px 40px; -webkit-mask-image: radial-gradient(ellipse at 70% 40%, #000 20%, transparent 70%); mask-image: radial-gradient(ellipse at 70% 40%, #000 20%, transparent 70%); }
+    [dir="rtl"] .grid-bg { -webkit-mask-image: radial-gradient(ellipse at 30% 40%, #000 20%, transparent 70%); mask-image: radial-gradient(ellipse at 30% 40%, #000 20%, transparent 70%); }
+
+    .hp { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+    .status-in { animation: rise 400ms var(--ease-out) both; }
+
+    /* Toast (certificate not available) */
+    .toast { position: fixed; inset-inline: 1rem; bottom: max(1.25rem, env(safe-area-inset-bottom)); z-index: 60; width: fit-content; max-width: calc(100vw - 2rem); margin-inline: auto; padding: 0.875rem 1.25rem; border-radius: 0.875rem; background: #0B2545; color: #fff; font-weight: 600; text-align: center; box-shadow: 0 18px 40px -12px rgba(11, 37, 69, 0.5); opacity: 0; transform: translateY(16px); pointer-events: none; transition: opacity 200ms ease-out, transform 350ms var(--ease-out); }
+    .toast.show { opacity: 1; transform: none; }
+
+    /* Shared dialog base (service modal + certificate viewer) */
+    .modal { margin: auto; padding: 0; border: 0; max-width: none; max-height: 92vh; max-height: 92dvh; overflow: hidden; border-radius: 1.5rem; background: #fff; color: #0B2545; box-shadow: 0 25px 50px -12px rgba(11, 37, 69, 0.45); }
+    .modal[open] { display: flex; flex-direction: column; }
+    .modal { opacity: 0; transform: translateY(16px) scale(0.98); transition: opacity 250ms ease-out, transform 350ms var(--ease-out); }
+    .modal.is-open { opacity: 1; transform: none; }
+    .modal::backdrop { background: rgba(11, 37, 69, 0.6); backdrop-filter: blur(4px); opacity: 0; transition: opacity 250ms ease-out; }
+    .modal.is-open::backdrop { opacity: 1; }
+    html.modal-open { overflow: hidden; }
+
+    .modal-close, .viewer-close { display: grid; place-items: center; flex: none; width: 2.5rem; height: 2.5rem; border-radius: 9999px; background: rgba(255, 255, 255, 0.95); color: #0B2545; box-shadow: 0 4px 12px rgba(11, 37, 69, 0.25); }
+    .modal-close { position: absolute; inset-block-start: 0.75rem; inset-inline-end: 0.75rem; z-index: 10; }
+    .modal-close:hover, .viewer-close:hover { background: #fff; }
+    .viewer-close { box-shadow: none; background: #F3F7FF; }
+    .viewer-close:hover { background: #DBEAFE; }
+
+    /* Service modal: two columns on desktop, one stacked column on mobile */
+    .modal-service { width: min(96vw, 72rem); height: min(92vh, 56rem); height: min(92dvh, 56rem); }
+    .modal-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; overflow-y: auto; overscroll-behavior: contain; }
+    .modal-col { display: flex; flex-direction: column; gap: 1.25rem; min-width: 0; padding: 1.25rem; }
+    .modal-col-b { background: #F3F7FF; border-top: 1px solid #DBEAFE; }
+    @media (min-width: 900px) {
+      .modal-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+      .modal-col { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 1.75rem; }
+      .modal-col-b { padding-top: 4rem; border-top: 0; border-inline-start: 1px solid #DBEAFE; }
+    }
+    .modal-title-frame { display: flex; align-items: center; gap: 0.875rem; padding: 1rem 1.25rem; padding-inline-end: 3.5rem; border-radius: 1rem; border: 1px solid rgba(127, 29, 29, 0.35); background: linear-gradient(135deg, #991B1B, #DC2626 60%, #EF4444); color: #fff; box-shadow: 0 12px 24px -14px rgba(185, 28, 28, 0.7); }
+    .modal-title-frame h3 { color: #fff; }
+    .modal-title-frame .card-icon { background: rgba(255, 255, 255, 0.2); color: #fff; }
+    @media (min-width: 900px) { .modal-title-frame { padding-inline-end: 1.25rem; } }
+    .modal-media { position: relative; flex: 0 0 auto; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 1rem; background: #0B2545; }
+    .modal-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; object-fit: contain; }
+    .modal-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .modal-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem; padding: 0 1.5rem; text-align: center; color: #DBEAFE; background: linear-gradient(135deg, #1E3A8A, #0B2545); }
+
+    .counter { display: flex; align-items: center; gap: 1rem; padding: 1.125rem 1.25rem; border-radius: 1rem; background: #fff; border: 1px solid #DBEAFE; box-shadow: 0 10px 24px -16px rgba(29, 78, 216, 0.5); }
+    .counter-icon { display: grid; place-items: center; flex: none; width: 3rem; height: 3rem; border-radius: 0.9rem; background: #DBEAFE; color: #1D4ED8; }
+
+    .offer-card { padding: 1.1rem 1.15rem; border-radius: 1rem; border: 1.5px solid #DBEAFE; background: #fff; transition: transform 180ms var(--ease-out), border-color 180ms ease-out, box-shadow 250ms ease-out; }
+    .offer-card:hover { transform: translateY(-2px); border-color: #93C5FD; box-shadow: 0 14px 28px -18px rgba(29, 78, 216, 0.5); }
+
+    .modal-confirm { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; min-height: 3.25rem; padding: 0.75rem 1.5rem; border-radius: 0.875rem; font-weight: 700; font-size: 1.05rem; line-height: 1.25; text-align: center; background: #1D4ED8; color: #fff; box-shadow: 0 10px 20px -8px rgba(29, 78, 216, 0.55); }
+    .modal-confirm:hover { background: #1E3A8A; }
+
+    /* FAQ accordion (native <details>/<summary>) */
+    .faq-item { transition: border-color 200ms ease-out, box-shadow 250ms ease-out; }
+    .faq-item:hover { border-color: #93C5FD; }
+    .faq-item[open] { border-color: #93C5FD; box-shadow: 0 14px 28px -20px rgba(29, 78, 216, 0.55); }
+    .faq-item summary { list-style: none; }
+    .faq-item summary::-webkit-details-marker { display: none; }
+    .faq-item summary:hover { color: #1D4ED8; }
+    .faq-chevron { transition: transform 250ms var(--ease-out); }
+    .faq-item[open] .faq-chevron { transform: rotate(180deg); }
+    .faq-item[open] .faq-answer { animation: faqIn 300ms var(--ease-out); }
+
+    /* Certificate viewer */
+    .modal-viewer { width: min(96vw, 64rem); height: min(92vh, 54rem); height: min(92dvh, 54rem); }
+    .viewer-head { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.875rem 1rem; border-bottom: 1px solid #DBEAFE; background: #fff; }
+    .viewer-stage { position: relative; flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: auto; background: #0B2545; }
+    .viewer-img { display: block; width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; }
+    .viewer-frame { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+    .viewer-fallback { display: flex; flex-direction: column; align-items: center; gap: 1rem; padding: 2rem; text-align: center; color: #DBEAFE; }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
+      .load, .load-pop, .chip { opacity: 1; }
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+
+<body class="bg-white font-sans text-ink antialiased">
+
+  <!-- NAVBAR -->
+  <header class="sticky top-0 z-50 border-b border-brand-light bg-white/90 backdrop-blur">
+    <nav class="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-4" aria-label="Main">
+      <a href="#home" dir="ltr" class="flex items-center gap-2.5 font-display text-xl font-extrabold tracking-tight">
+        <img src="logo-mybusiness_fikra-automation.png" alt="Fikra Logo" class="h-9 w-auto object-contain">
+        <span>Fikra<span class="font-medium text-brand"> Automation</span></span>
+      </a>
+      <ul id="nav-desktop" class="hidden items-center gap-8 text-sm font-medium md:flex"></ul>
+      <div class="flex items-center gap-2">
+        <div id="lang-toggle" dir="ltr" role="group" aria-label="Language" class="lang-toggle">
+          <span id="lang-pill" class="lang-pill"></span>
+        </div>
+        <button id="menu-btn" class="u-press rounded-lg p-2 md:hidden" aria-expanded="false" aria-controls="mobile-menu">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+        </button>
+      </div>
+    </nav>
+    <div id="mobile-menu" class="absolute inset-x-0 top-full border-b border-brand-light bg-white md:hidden">
+      <ul id="nav-mobile" class="flex flex-col px-5 py-3 text-base font-medium"></ul>
+    </div>
+  </header>
+
+  <div id="app">
+    <main>
+      <!-- HERO / ABOUT -->
+      <section id="home" class="relative scroll-mt-20 overflow-hidden bg-brand-mist">
+        <div class="grid-bg absolute inset-0" aria-hidden="true"></div>
+        <div id="about" class="relative mx-auto grid max-w-6xl scroll-mt-20 items-center gap-12 px-5 py-16 sm:py-20 lg:grid-cols-2 lg:gap-16 lg:py-28">
+          <div>
+            <p class="load inline-flex items-center gap-2 rounded-full bg-white px-3.5 py-1.5 text-sm font-medium text-brand-dark shadow-sm ring-1 ring-brand-light" style="--i:0">
+              <span class="h-2 w-2 rounded-full bg-brand"></span><span data-i18n="heroBadge"></span>
+            </p>
+            <h1 class="load mt-6 font-display text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl" style="--i:1" data-i18n="heroTitle"></h1>
+            <p class="load mt-6 max-w-xl text-lg leading-relaxed text-slate-600" style="--i:2" data-i18n="heroIntro"></p>
+            <div class="load mt-8 flex flex-wrap items-center gap-4" style="--i:3">
+              <a href="#services" class="btn btn-lg btn-primary u-press u-rise shadow-lg shadow-brand/30" data-i18n="heroCta"></a>
+              <a href="#credentials" class="btn btn-outline u-press u-rise" data-i18n="heroCta2"></a>
+            </div>
+          </div>
+
+          <div class="portrait">
+            <div class="portrait-frame load-pop" style="--i:2">
+              <svg class="absolute inset-0 m-auto text-brand/30" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" stroke-linecap="round" /></svg>
+              <img class="portrait-img" src="photo_without_bg-removebg-preview.png" alt="" data-i18n-alt="portraitAlt" onerror="this.style.display='none'" />
+            </div>
+            <div class="chip chip-light chip-top" style="--i:4"><span class="chip-icon">&#9889;</span><span data-i18n="chip1"></span></div>
+            <div class="chip chip-light chip-side" style="--i:5"><span class="chip-icon">&#128196;</span><span data-i18n="chip2"></span></div>
+            <div class="chip chip-solid chip-bottom" style="--i:6"><span aria-hidden="true">&#10003;</span><span data-i18n="chip3"></span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SERVICES (rendered from data) -->
+      <section id="services" class="section">
+        <h2 class="section-title" data-i18n="servicesTitle"></h2>
+        <p class="section-sub" data-i18n="servicesSub"></p>
+        <div id="service-grid" class="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3"></div>
+      </section>
+
+      <!-- FAQ (rendered from the Supabase table service_faqs; hidden until at least one active question exists) -->
+      <section id="faq-section" class="scroll-mt-16 border-t border-brand-light bg-white" aria-labelledby="faq-title" hidden>
+        <div class="section scroll-mt-0">
+          <h2 id="faq-title" class="section-title" data-i18n="faqTitle"></h2>
+          <p class="section-sub" data-i18n="faqSub"></p>
+          <div id="faq-list" class="mt-10 max-w-3xl space-y-3"></div>
+        </div>
+      </section>
+
+      <!-- CERTIFICATES / CV (rendered from data: see CERTIFICATES in the script) -->
+      <section id="credentials" class="scroll-mt-16 bg-brand-mist">
+        <div class="section scroll-mt-0">
+          <div class="flex flex-wrap items-end justify-between gap-6">
+            <div>
+              <h2 class="section-title" data-i18n="cvTitle"></h2>
+              <p class="section-sub" data-i18n="cvSub"></p>
+            </div>
+            <a href="cv.pdf" download class="btn btn-dark u-press u-rise" data-i18n="cvDownload"></a>
+          </div>
+          <div class="mt-12 grid gap-10 lg:grid-cols-5">
+            <ol id="timeline" class="timeline lg:col-span-2"></ol>
+            <div id="certs" class="grid content-start gap-5 sm:grid-cols-2 lg:col-span-3"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- REQUEST A SERVICE / LEAD FORM -->
+      <section id="request" class="scroll-mt-16 bg-white">
+        <div class="section scroll-mt-0">
+          <div class="grid gap-12 lg:grid-cols-5 lg:gap-16">
+            <div class="lg:col-span-2">
+              <h2 class="section-title" data-i18n="requestTitle"></h2>
+              <p class="section-sub" data-i18n="requestSub"></p>
+              <ul class="mt-8 space-y-4 text-slate-700">
+                <li class="flex items-center gap-3"><span class="card-icon h-10 w-10 shrink-0"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></span><span data-i18n="reqPoint1"></span></li>
+                <li class="flex items-center gap-3"><span class="card-icon h-10 w-10 shrink-0"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></span><span data-i18n="reqPoint2"></span></li>
+                <li class="flex items-center gap-3"><span class="card-icon h-10 w-10 shrink-0"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></span><span data-i18n="reqPoint3"></span></li>
+              </ul>
+            </div>
+
+            <div class="lg:col-span-3">
+              <form id="lead-form" class="card relative p-6 shadow-xl shadow-brand/10 sm:p-8" novalidate>
+                <div id="lead-status" class="mb-6" role="status" aria-live="polite" hidden></div>
+                <div id="lead-offer" class="mb-6" aria-live="polite" hidden></div>
+                <div class="grid gap-5 sm:grid-cols-2">
+                  <div class="field">
+                    <label class="field-label" for="lead-name"><span data-i18n="fName"></span><span class="text-brand" aria-hidden="true"> *</span></label>
+                    <input id="lead-name" name="name" data-key="name" type="text" dir="auto" class="field-input" maxlength="100" autocomplete="name" required aria-describedby="err-name" data-i18n-ph="pName">
+                    <p id="err-name" class="field-error" hidden></p>
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="lead-business"><span data-i18n="fBusiness"></span><span class="text-brand" aria-hidden="true"> *</span></label>
+                    <input id="lead-business" name="business" data-key="business" type="text" dir="auto" class="field-input" maxlength="120" autocomplete="organization" required aria-describedby="err-business" data-i18n-ph="pBusiness">
+                    <p id="err-business" class="field-error" hidden></p>
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="lead-phone"><span data-i18n="fPhone"></span><span class="text-brand" aria-hidden="true"> *</span></label>
+                    <input id="lead-phone" name="phone" data-key="phone" type="tel" inputmode="tel" dir="ltr" class="field-input" maxlength="30" autocomplete="tel" required aria-describedby="err-phone" placeholder="+212 6 00 00 00 00">
+                    <p id="err-phone" class="field-error" hidden></p>
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="lead-email" data-i18n="fEmail"></label>
+                    <input id="lead-email" name="email" data-key="email" type="email" inputmode="email" dir="ltr" class="field-input" maxlength="254" autocomplete="email" aria-describedby="err-email" data-i18n-ph="pEmail">
+                    <p id="err-email" class="field-error" hidden></p>
+                  </div>
+                  <div class="field sm:col-span-2">
+                    <label class="field-label" for="lead-service"><span data-i18n="fService"></span><span class="text-brand" aria-hidden="true"> *</span></label>
+                    <select id="lead-service" name="service" data-key="service" class="field-input" required aria-describedby="err-service"></select>
+                    <p id="err-service" class="field-error" hidden></p>
+                  </div>
+                  <div class="field sm:col-span-2">
+                    <label class="field-label" for="lead-message" data-i18n="fMessage"></label>
+                    <textarea id="lead-message" name="message" data-key="message" rows="4" dir="auto" class="field-input min-h-[7rem] resize-y" maxlength="1200" aria-describedby="err-message" data-i18n-ph="pMessage"></textarea>
+                    <p id="err-message" class="field-error" hidden></p>
+                  </div>
+                </div>
+
+                <div class="hp" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+
+                <div class="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <button id="lead-submit" type="submit" class="btn btn-primary btn-lg u-press u-rise w-full shadow-lg shadow-brand/30 sm:w-auto">
+                    <span class="spinner" aria-hidden="true"></span><span data-i18n="submitLead"></span>
+                  </button>
+                  <p class="text-sm text-slate-500" data-i18n="privacyNote"></p>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- CONTACT / FOOTER -->
+    <footer id="contact" class="scroll-mt-16 bg-ink text-white">
+      <div class="mx-auto max-w-6xl px-5 py-20">
+        <div class="grid gap-12 lg:grid-cols-2">
+          <div>
+            <h2 class="section-title" data-i18n="contactTitle"></h2>
+            <p class="section-sub mt-4 max-w-md text-blue-100/80" data-i18n="contactSub"></p>
+          </div>
+          <ul id="contact-list" class="grid gap-4 self-center"></ul>
+        </div>
+        <div class="mt-16 flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-8 text-sm text-blue-100/70">
+          <p>&copy; <span id="year"></span> Fikra Automation. <span data-i18n="rights"></span></p>
+          <a href="#home" class="u-press rounded-lg px-3 py-2 hover:text-white" data-i18n="toTop"></a>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Polite message for certificates that are not available yet -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- SERVICE MODAL: column A = title, media, feedback / column B = visitors, offers, order -->
+  <dialog id="service-modal" class="modal modal-service" aria-labelledby="modal-title">
+    <button type="button" class="modal-close u-press" data-close data-i18n-aria="modalClose">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+    </button>
+    <div class="modal-grid">
+      <section class="modal-col">
+        <div class="modal-title-frame">
+          <span id="modal-icon" class="card-icon shrink-0"></span>
+          <h3 id="modal-title" class="font-display text-xl font-bold sm:text-2xl"></h3>
+        </div>
+        <div id="modal-media" class="modal-media"></div>
+        <p id="modal-desc" class="card-text text-base sm:text-lg"></p>
+
+        <div id="fb-wrap" class="rounded-2xl border border-brand-light bg-white p-4 sm:p-5">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <h4 class="font-display text-lg font-bold" data-i18n="fbTitle"></h4>
+            <button type="button" id="fb-add" class="btn btn-primary u-press u-rise !px-4 !py-2 text-sm" data-i18n="fbAdd"></button>
+          </div>
+          <p id="fb-notice" class="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800" role="status" hidden></p>
+          <div id="fb-panel" class="mt-4" hidden></div>
+          <ul id="fb-list" class="mt-4 space-y-3" aria-live="polite"></ul>
+        </div>
+      </section>
+
+      <section class="modal-col modal-col-b">
+        <div class="counter">
+          <span class="counter-icon" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 4.6a3.5 3.5 0 010 6.8M18.5 14.4c1.9.7 3 2.5 3 5.6"/></svg></span>
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-slate-600" data-i18n="visitorsLabel"></p>
+            <p id="visit-count" class="font-display text-3xl font-extrabold text-ink" aria-live="polite">&mdash;</p>
+            <p class="mt-0.5 text-xs text-slate-500" data-i18n="visitorsSub"></p>
+          </div>
+        </div>
+
+        <div>
+          <h4 id="offers-title" class="font-display text-lg font-bold" data-i18n="offersTitle"></h4>
+          <div id="modal-offers" role="list" aria-labelledby="offers-title" class="mt-3 grid gap-4"></div>
+        </div>
+
+      </section>
+    </div>
+  </dialog>
+
+  <!-- CERTIFICATE VIEWER -->
+  <dialog id="cert-modal" class="modal modal-viewer" aria-labelledby="cert-title">
+    <div class="viewer-head">
+      <div class="min-w-0">
+        <h3 id="cert-title" class="truncate font-display text-lg font-bold sm:text-xl"></h3>
+        <p id="cert-meta" class="truncate text-sm text-slate-600"></p>
+      </div>
+      <div class="flex shrink-0 items-center gap-2">
+        <a id="cert-open" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline u-press !px-3.5 !py-2 text-sm" data-i18n="certOpen"></a>
+        <button type="button" class="viewer-close u-press" data-close data-i18n-aria="modalClose">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+      </div>
+    </div>
+    <div id="cert-stage" class="viewer-stage"></div>
+  </dialog>
+
+  <script>
+    /* ===== 3) CONFIG ===== */
+    const CONFIG = {
+      email: 'info@fikra-automation.com',
+      defaultLang: 'fr',
+      storageKey: 'lang',
+      supabase: {
+        // Confirm the URL in Supabase > Project Settings > API (it must match the project ref inside the anon key).
+        url: 'https://iuwbkrucimuwmwvkzhrv.supabase.co',
+        anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1d2JrcnVjaW11d213dmt6aHJ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyNzY1ODgsImV4cCI6MjEwNjg1MjU4OH0.8eHW0UsEcu6M6NYY5Uff1Pz1p7ToEg56RTcrLD8NuvY',
+        table: 'services_type',
+        offersTable: 'service_offers',
+        faqTable: 'service_faqs',
+        timeoutMs: 8000,
+      },
+      feedback: { table: 'service_feedback', maxLength: 500, minLength: 3 },
+      visitsKey: 'fikra_visit',          // sessionStorage flag: one visit counted per browser session
+      pendingKey: 'fikra_fb_pending',    // sessionStorage: service to reopen after the Google sign-in redirect
+      leads: {
+        table: 'leads',
+        timeoutMs: 10000,
+        // Left: form field. Right: column name in your `leads` table. Use '' to skip a column.
+        // `offer` and `price` are optional extra columns; the offer is always written into `message` too.
+        columns: { name: 'full_name', business: 'business_name', phone: 'phone', email: 'email', service: 'service_type', message: 'message', serviceId: '', offer: '', price: '' },
+      },
+    };
+
+    /* ===== 4) DATA (edit content here; layout never changes) =====
+       - Add a language    : add to LANGS and add a block in I18N.
+       - Add a service     : add a row in Supabase (SERVICES is only the offline fallback).
+                             LOCAL_EXTRA_SERVICES are always shown, even when Supabase answers.
+                             Optional columns: image_url (cover shown when there is no video), video_url.
+       - Add an offer      : add a row in Supabase table `service_offers`, or add it to LOCAL_OFFERS below.
+       - Add a certificate : add an object to CERTIFICATES. Set `file` to its path or URL (image or PDF);
+                             leave '' if it is not available yet (visitors see a polite message).
+       - Add a CV step     : push an object into I18N.<lang>.timeline. */
+    const LANGS = [
+      { code: 'fr', label: 'FR',   dir: 'ltr' },
+      { code: 'ar', label: 'عربي', dir: 'rtl' },
+    ];
+
+    const NAV = [['home', '#home'], ['about', '#about'], ['services', '#services'], ['contact', '#request']];
+
+    const ICONS = {
+      workflow: '<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 6H14a4 4 0 014 4v5.5"/>',
+      scripts: '<path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/>',
+      sheets: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M9 21V9"/>',
+      ai: '<path d="M4 4h16v12H8l-4 4z"/><path d="M8 9h8M8 12h5"/>',
+      data: '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
+      audit: '<path d="M12 3l9 4.5-9 4.5-9-4.5z"/><path d="M3 12l9 4.5 9-4.5M3 16.5L12 21l9-4.5"/>',
+      loyalty: '<rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M2.5 10h19M6.5 15h4"/><path d="M17 13.2l.9 1.8 2 .3-1.45 1.4.35 2-1.8-.95-1.8.95.35-2-1.45-1.4 2-.3z"/>',
+      default: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
+    };
+
+    // Offline fallback only: shown if Supabase cannot be reached or returns no rows.
+    const SERVICES = [
+      { id: 'workflow', video: '', image: '', icon: 'workflow' },
+      { id: 'scripts', video: '', image: '', icon: 'scripts' },
+      { id: 'sheets', video: '', image: '', icon: 'sheets' },
+      { id: 'ai', video: '', image: '', icon: 'ai' },
+      { id: 'data', video: '', image: '', icon: 'data' },
+      { id: 'audit', video: '', image: '', icon: 'audit' },
+      { id: 'loyalty', video: '', image: '', icon: 'loyalty' },
+    ];
+
+    // Always shown after the Supabase services (skipped if a row with the same id already exists there).
+    const LOCAL_EXTRA_SERVICES = [
+      { id: 'loyalty', video: '', image: '', icon: 'loyalty' },
+    ];
+
+    // Local offers, used when Supabase has none for a service. Format (price: number, or null = on quote):
+    //   loyalty: [{ id: 'starter', name: { fr: 'Starter', ar: 'الأساسي' }, note: { fr: '…', ar: '…' }, price: 0, currency: 'MAD' }]
+    // A service with no offer anywhere shows one "custom quote" option automatically.
+    const LOCAL_OFFERS = {};
+
+    const CERTIFICATES = [
+      {
+        id: 'python',
+        name: { fr: 'Python pour l\'automatisation', ar: 'بايثون للأتمتة' },
+        issuer: 'Coursera',
+        year: '2025',
+        file: 'python_certificate.pdf',
+      },
+      {
+        id: 'aeo',
+        name: { fr: 'AEO Fundamentals', ar: 'أساسيات AEO' },
+        issuer: '',
+        year: '',
+        file: 'certificate-AEO_Fundamentals.png',   // image or PDF: opens in the viewer
+      },
+    ];
+
+    const CONTACT_LINKS = [
+      { key: 'email',    href: 'mailto:' + CONFIG.email,     value: CONFIG.email },
+      { key: 'whatsapp', href: 'https://wa.me/212645199444', value: '+212 6 45 19 94 44',           external: true },
+      { key: 'linkedin', href: 'https://www.linkedin.com/',  value: 'linkedin.com/in/your-profile', external: true },
+    ];
+
+    const I18N = {
+      fr: {
+        docTitle: 'Fikra Automation | Automatisez vos tâches et processus',
+        nav: { home: 'Accueil', about: 'À propos', services: 'Services', contact: 'Contact' },
+        ui: {
+          menu: 'Ouvrir le menu',
+          heroBadge: 'Disponible pour de nouveaux projets d\'automatisation',
+          heroTitle: 'Arrêtez les tâches répétitives. Laissez vos processus tourner seuls.',
+          heroIntro: 'Bonjour, je suis Fikra. Je connecte vos outils, fiabilise vos flux de données et automatise le quotidien : factures, rapports, relances clients.',
+          heroCta: 'Découvrir les services', heroCta2: 'Voir mes références',
+          portraitAlt: 'Portrait de Fikra',
+          modalClose: 'Fermer la fenêtre', cancel: 'Annuler',
+          videoSoon: 'Vidéo explicative bientôt disponible',
+          visitorsLabel: 'Visiteurs du site', visitorsSub: 'Compteur réel, mis à jour à chaque nouvelle visite.',
+          offersTitle: 'Offres actuelles',
+          offerQuote: 'Offre sur mesure', offerQuoteNote: 'Décrivez votre besoin et je vous envoie un devis.',
+          priceQuote: 'Sur devis', currMAD: 'MAD',
+          orderNow: 'Commander maintenant',
+          offerChosen: 'Offre choisie', offerClear: 'Retirer l\'offre',
+          fbTitle: 'Avis des clients', fbAdd: 'Ajouter un avis',
+          fbEmpty: 'Aucun avis pour le moment. Soyez le premier à partager votre expérience.',
+          fbLoading: 'Chargement des avis…', fbError: 'Impossible de charger les avis pour le moment.',
+          fbWarnTitle: 'Avant de publier : vos informations seront publiques',
+          fbWarnText: 'Votre adresse e-mail et votre photo de profil Google seront visibles par tous les visiteurs, à côté de votre avis.',
+          fbPolicy1: 'Soyez respectueux : pas d\'insultes, de spam ni de publicité.',
+          fbPolicy2: 'Ne publiez que votre expérience réelle avec ce service.',
+          fbPolicy3: 'Tout avis qui ne respecte pas ces règles pourra être supprimé.',
+          fbConsent: 'J\'ai compris et j\'accepte que mon e-mail et ma photo soient affichés publiquement.',
+          fbContinueGoogle: 'Continuer avec Google', fbContinue: 'Continuer',
+          fbSignedAs: 'Connecté en tant que', fbSignOut: 'Se déconnecter',
+          fbWriteLabel: 'Votre avis', fbPlaceholder: 'Partagez votre expérience avec ce service…', fbSubmit: 'Publier mon avis',
+          fbTooShort: 'Votre avis est trop court (3 caractères minimum).',
+          fbThanks: 'Merci ! Votre avis est publié.', fbSendFail: 'Publication impossible. Réessayez dans un instant.',
+          fbAuthFail: 'Connexion Google impossible. Réessayez.', fbNoBackend: 'Le service d\'avis n\'est pas disponible pour le moment.',
+          requestTitle: 'Demander un service',
+          requestSub: 'Décrivez votre besoin en quelques lignes. Je vous réponds sous un jour ouvré avec une proposition claire.',
+          reqPoint1: 'Réponse sous un jour ouvré', reqPoint2: 'Devis gratuit et sans engagement', reqPoint3: 'Vos informations restent confidentielles',
+          fName: 'Nom complet', fBusiness: 'Nom du commerce ou du café', fPhone: 'Téléphone / WhatsApp', fService: 'Service demandé', fEmail: 'E-mail (facultatif)', fMessage: 'Notes supplémentaires (facultatif)',
+          pName: 'Votre nom et prénom', pBusiness: 'Ex. Café Atlas', pEmail: 'nom@exemple.com', pMessage: 'Décrivez brièvement ce que vous voulez automatiser…',
+          selectPlaceholder: 'Choisir un service', optOther: 'Autre / je ne sais pas encore',
+          submitLead: 'Envoyer ma demande', privacyNote: 'Vos informations servent uniquement à vous répondre.',
+          errName: 'Veuillez saisir votre nom complet.', errBusiness: 'Veuillez saisir le nom de votre commerce.',
+          errPhone: 'Entrez un numéro valide (8 à 15 chiffres).', errEmail: 'Adresse e-mail invalide.', errService: 'Veuillez choisir un service.', errMessage: 'Message trop long (1000 caractères maximum).',
+          okTitle: 'Demande envoyée !', okText: 'Merci. Je vous contacte très bientôt sur le numéro indiqué.',
+          failTitle: 'Envoi impossible', failNet: 'Pas de connexion internet. Vérifiez votre réseau puis réessayez.',
+          failGeneric: 'Un problème est survenu. Réessayez dans un instant, ou écrivez-moi sur WhatsApp.',
+          waLabel: 'Écrire sur WhatsApp', statusClose: 'Fermer le message',
+          chip1: 'Nouvelle commande reçue', chip2: 'Facture envoyée', chip3: 'Rapport prêt, 0 clic',
+          servicesTitle: 'Services',
+          servicesSub: 'Choisissez une automatisation prête à l\'emploi ou décrivez-moi votre propre processus. Chaque service est livré testé et documenté.',
+          order: 'Commander ce service',
+          servicesEmpty: 'Aucun service disponible pour le moment.',
+          faqTitle: 'Questions fréquentes',
+          faqSub: 'Les réponses aux questions que l\'on me pose le plus souvent sur l\'automatisation et mes services.',
+          cvTitle: 'Certificats et CV',
+          cvSub: 'Mon parcours et mes formations.',
+          cvDownload: 'Télécharger le CV complet',
+          certView: 'Voir le certificat', certSoon: 'Bientôt disponible', certUnavailable: 'Certificat pas encore disponible.',
+          certOpen: 'Ouvrir dans un onglet', certLoadError: 'Impossible d\'afficher ce certificat.', certPdfFallback: 'Votre navigateur ne peut pas afficher ce PDF ici.',
+          contactTitle: 'Automatisons quelque chose.',
+          contactSub: 'Dites-moi quelle tâche vous prend le plus de temps. Je réponds sous un jour ouvré.',
+          email: 'E-mail', whatsapp: 'WhatsApp', linkedin: 'LinkedIn',
+          rights: 'Tous droits réservés.', toTop: 'Haut de page',
+        },
+        services: {
+          workflow: { title: 'Automatisation de workflows', desc: 'Connectez vos applications avec Zapier, Make ou n8n pour que les données circulent sans copier-coller.' },
+          scripts:  { title: 'Scripts et bots sur mesure', desc: 'Scripts Python et JavaScript pour extraire, convertir, planifier et notifier, ou bots Telegram et WhatsApp qui répondent à votre place.' },
+          sheets:   { title: 'Automatisation de tableurs et rapports', desc: 'Des feuilles Excel et Google Sheets qui se mettent à jour seules, avec tableaux de bord et rapports hebdomadaires par e-mail.' },
+          ai:       { title: 'Assistants IA', desc: 'Des agents qui trient vos e-mails, répondent aux questions fréquentes de vos clients et rédigent des documents dans votre style.' },
+          data:     { title: 'Saisie et synchronisation de données', desc: 'Déplacez vos enregistrements entre CRM, comptabilité et base de données automatiquement, avec contrôle des doublons.' },
+          audit:    { title: 'Audit de processus', desc: 'Un examen rapide de votre façon de travailler, avec une liste classée de ce qu\'il faut automatiser en premier et le temps gagné.' },
+          loyalty:  { title: 'Carte de fidélité digitale pour clients', desc: 'Une carte de fidélité sur mobile pour votre café ou restaurant : vos clients cumulent des points, scannent un QR code et reçoivent leur cadeau, sans carte papier.' },
+        },
+        timeline: [
+          { period: '2025 à aujourd\'hui', title: 'Spécialiste automatisation freelance', text: 'Fikra Automation. Plus de 40 workflows livrés à des petites entreprises et des vendeurs en ligne.' },
+          { period: '2020 à 2023', title: 'Analyste opérations et données', text: 'Création de chaînes de reporting qui ont ramené deux jours de travail hebdomadaire à dix minutes.' },
+        ],
+      },
+
+      ar: {
+        docTitle: 'Fikra Automation | أتمتة مهامك وعمليات شركتك',
+        nav: { home: 'الرئيسية', about: 'من أنا', services: 'الخدمات', contact: 'تواصل معي' },
+        ui: {
+          menu: 'فتح القائمة',
+          heroBadge: 'متاح لمشاريع أتمتة جديدة',
+          heroTitle: 'توقف عن تكرار المهام. دع عملياتك تعمل وحدها.',
+          heroIntro: 'مرحباً، أنا فكرة. أربط أدواتك ببعضها، وأنظّم تدفق بياناتك، وأؤتمت مهامك اليومية: الفواتير والتقارير ومتابعة العملاء.',
+          heroCta: 'استكشف الخدمات', heroCta2: 'اطّلع على شهاداتي',
+          portraitAlt: 'صورة شخصية لفكرة',
+          modalClose: 'إغلاق النافذة', cancel: 'إلغاء',
+          videoSoon: 'فيديو توضيحي قريباً',
+          visitorsLabel: 'زوار الموقع', visitorsSub: 'عدّاد حقيقي يرتفع مع كل زيارة جديدة.',
+          offersTitle: 'العروض الحالية',
+          offerQuote: 'عرض حسب الطلب', offerQuoteNote: 'صِف لي احتياجك وسأرسل لك عرض سعر.',
+          priceQuote: 'حسب الطلب', currMAD: 'درهم',
+          orderNow: 'اطلب الآن',
+          offerChosen: 'العرض المختار', offerClear: 'إزالة العرض',
+          fbTitle: 'آراء العملاء', fbAdd: 'أضف رأيك',
+          fbEmpty: 'لا توجد آراء بعد. كن أول من يشارك تجربته.',
+          fbLoading: 'جارٍ تحميل الآراء…', fbError: 'تعذّر تحميل الآراء حالياً.',
+          fbWarnTitle: 'قبل النشر: بياناتك ستكون علنية',
+          fbWarnText: 'سيظهر بريدك الإلكتروني وصورة ملفك الشخصي في حساب Google لجميع الزوار بجانب رأيك.',
+          fbPolicy1: 'احترم الجميع: لا شتائم ولا رسائل مزعجة ولا إعلانات.',
+          fbPolicy2: 'انشر فقط تجربتك الحقيقية مع هذه الخدمة.',
+          fbPolicy3: 'قد يُحذف أي رأي لا يلتزم بهذه القواعد.',
+          fbConsent: 'فهمت وأوافق على عرض بريدي الإلكتروني وصورتي للعموم.',
+          fbContinueGoogle: 'المتابعة عبر Google', fbContinue: 'متابعة',
+          fbSignedAs: 'مسجّل الدخول باسم', fbSignOut: 'تسجيل الخروج',
+          fbWriteLabel: 'رأيك', fbPlaceholder: 'شارك تجربتك مع هذه الخدمة…', fbSubmit: 'نشر رأيي',
+          fbTooShort: 'رأيك قصير جداً (3 أحرف على الأقل).',
+          fbThanks: 'شكراً لك! تم نشر رأيك.', fbSendFail: 'تعذّر النشر. أعد المحاولة بعد قليل.',
+          fbAuthFail: 'تعذّر تسجيل الدخول عبر Google. أعد المحاولة.', fbNoBackend: 'خدمة الآراء غير متاحة حالياً.',
+          requestTitle: 'اطلب خدمتك',
+          requestSub: 'اكتب لنا احتياجك باختصار، وسأردّ عليك خلال يوم عمل واحد بعرض واضح.',
+          reqPoint1: 'ردّ خلال يوم عمل واحد', reqPoint2: 'عرض سعر مجاني دون التزام', reqPoint3: 'بياناتك تبقى سرّية',
+          fName: 'الاسم الكامل', fBusiness: 'اسم المحل أو المقهى', fPhone: 'رقم الهاتف', fService: 'الخدمة المطلوبة', fEmail: 'البريد الإلكتروني (اختياري)', fMessage: 'ملاحظات إضافية (اختياري)',
+          pName: 'اسمك الكامل', pBusiness: 'مثال: مقهى الأطلس', pEmail: 'name@example.com', pMessage: 'صِف باختصار ما تريد أتمتته…',
+          selectPlaceholder: 'اختر خدمة', optOther: 'أخرى / لم أحدد بعد',
+          submitLead: 'إرسال الطلب', privacyNote: 'تُستخدم بياناتك فقط للردّ عليك.',
+          errName: 'يرجى إدخال اسمك الكامل.', errBusiness: 'يرجى إدخال اسم المحل أو المقهى.',
+          errPhone: 'أدخل رقم هاتف صحيحاً (من 8 إلى 15 رقماً).', errEmail: 'عنوان البريد الإلكتروني غير صالح.', errService: 'يرجى اختيار خدمة.', errMessage: 'الرسالة طويلة جداً (1000 حرف كحد أقصى).',
+          okTitle: 'تم إرسال طلبك!', okText: 'شكراً لك. سأتواصل معك قريباً على الرقم الذي أدخلته.',
+          failTitle: 'تعذّر الإرسال', failNet: 'لا يوجد اتصال بالإنترنت. تحقق من الشبكة ثم أعد المحاولة.',
+          failGeneric: 'حدثت مشكلة. أعد المحاولة بعد قليل، أو راسلني عبر واتساب.',
+          waLabel: 'راسلني على واتساب', statusClose: 'إغلاق الرسالة',
+          chip1: 'وصل طلب جديد', chip2: 'أُرسلت الفاتورة', chip3: 'التقرير جاهز دون نقرة',
+          servicesTitle: 'الخدمات',
+          servicesSub: 'اختر أتمتة جاهزة أو صِف لي عمليتك الخاصة. تُسلَّم كل خدمة بعد اختبارها مع توثيقها.',
+          order: 'اطلب الخدمة',
+          servicesEmpty: 'لا توجد خدمات متاحة حالياً.',
+          faqTitle: 'الأسئلة الشائعة',
+          faqSub: 'أجوبة عن أكثر الأسئلة التي تصلني حول الأتمتة وخدماتي.',
+          cvTitle: 'الشهادات والسيرة الذاتية',
+          cvSub: 'مساري المهني وتكويني.',
+          cvDownload: 'تحميل السيرة الذاتية كاملة',
+          certView: 'عرض الشهادة', certSoon: 'قريباً', certUnavailable: 'الشهادة غير متاحة بعد.',
+          certOpen: 'فتح في تبويب', certLoadError: 'تعذّر عرض هذه الشهادة.', certPdfFallback: 'متصفحك لا يستطيع عرض ملف PDF هنا.',
+          contactTitle: 'لنُؤتمت شيئاً معاً.',
+          contactSub: 'أخبرني ما المهمة التي تستهلك وقتك. أردّ خلال يوم عمل واحد.',
+          email: 'البريد', whatsapp: 'واتساب', linkedin: 'لينكدإن',
+          rights: 'جميع الحقوق محفوظة.', toTop: 'إلى الأعلى',
+        },
+        services: {
+          workflow: { title: 'أتمتة سير العمل', desc: 'اربط تطبيقاتك عبر Zapier وMake وn8n لتنتقل البيانات بينها دون نسخ ولصق.' },
+          scripts:  { title: 'سكربتات وروبوتات مخصصة', desc: 'سكربتات Python وJavaScript للاستخراج والتحويل والجدولة والتنبيه، وروبوتات تيليغرام وواتساب تردّ نيابة عنك.' },
+          sheets:   { title: 'أتمتة الجداول والتقارير', desc: 'جداول Excel وGoogle Sheets تُحدّث نفسها، مع لوحات متابعة وتقارير أسبوعية تصل إلى بريدك.' },
+          ai:       { title: 'مساعدون بالذكاء الاصطناعي', desc: 'وكلاء يرتّبون رسائلك، ويجيبون عن أسئلة العملاء المتكررة، ويكتبون المستندات بأسلوبك.' },
+          data:     { title: 'إدخال البيانات ومزامنتها', desc: 'انقل السجلات بين نظام العملاء والمحاسبة وقاعدة البيانات تلقائياً مع التحقق من التكرار.' },
+          audit:    { title: 'تدقيق العمليات', desc: 'مراجعة قصيرة لطريقة عمل فريقك، مع قائمة مرتّبة بما يجب أتمتته أولاً وما ستوفره من وقت.' },
+          loyalty:  { title: 'بطاقة الولاء الرقمي للعملاء', desc: 'بطاقة ولاء على الهاتف لمقهاك أو مطعمك: يجمع زبناؤك النقاط ويمسحون رمز QR ويحصلون على هديتهم دون بطاقة ورقية.' },
+        },
+        timeline: [
+          { period: '2025 حتى الآن', title: 'مختص أتمتة مستقل', text: 'Fikra Automation. أكثر من 40 سير عمل سُلّمت لشركات صغيرة وبائعين عبر الإنترنت.' },
+          { period: '2020 إلى 2023', title: 'محلل عمليات وبيانات', text: 'بنيت منظومات تقارير خفّضت عمل يومين أسبوعياً إلى عشر دقائق.' },
+        ],
+      },
+    };
+
+    /* ===== 4b) DATA ACCESS + HELPERS =====
+       Supabase one-time setup (SQL editor). Existing `services_type` / `leads` tables are unchanged.
+
+       -- PUBLIC READ + LIVE UPDATES (required so the website sees what admin.html saves)
+       alter table public.services_type enable row level security;
+       drop policy if exists "public read services" on public.services_type;
+       create policy "public read services" on public.services_type for select to anon, authenticated using (true);
+       alter publication supabase_realtime add table public.services_type, public.service_offers;   -- ignore "already member" errors
+
+       -- FAQ (shown in the FAQ section and in the FAQPage JSON-LD). Fill it from the Supabase table editor.
+       create table public.service_faqs (
+         id uuid primary key default gen_random_uuid(), created_at timestamptz not null default now(),
+         question_fr text not null, answer_fr text not null, question_ar text, answer_ar text,
+         sort_order int default 0, is_active boolean default true);
+       alter table public.service_faqs enable row level security;
+       create policy "public read faqs" on public.service_faqs for select to anon, authenticated using (is_active);
+       create policy "admin manages faqs" on public.service_faqs for all to authenticated using (public.is_admin()) with check (public.is_admin());
+       alter publication supabase_realtime add table public.service_faqs;
+
+       -- Visitor counter (real, counted once per browser session)
+       create table public.site_stats (id int primary key default 1, visits bigint not null default 0);
+       insert into public.site_stats (id, visits) values (1, 0);
+       alter table public.site_stats enable row level security;
+       create function public.register_visit() returns bigint language sql security definer set search_path = public
+         as $$ update site_stats set visits = visits + 1 where id = 1 returning visits; $$;
+       create function public.get_visits() returns bigint language sql stable security definer set search_path = public
+         as $$ select visits from site_stats where id = 1; $$;
+       grant execute on function public.register_visit(), public.get_visits() to anon, authenticated;
+
+       -- Offers (price = null means "on quote"). The admin dashboard (admin.html) manages these rows.
+       create table public.service_offers (
+         id uuid primary key default gen_random_uuid(), service_id text not null,
+         name_fr text not null, name_ar text, note_fr text, note_ar text, features_fr text, features_ar text,  -- features: one per line
+         price numeric, currency text default 'MAD', sort_order int default 0, is_active boolean default true);
+       alter table public.service_offers enable row level security;
+       create policy "public read offers" on public.service_offers for select to anon, authenticated using (is_active);
+
+       -- Customer feedback (only signed-in Google users can write; everybody can read)
+       -- Enable the Google provider in Supabase > Authentication > Providers, and add this page's URL to Redirect URLs.
+       create table public.service_feedback (
+         id uuid primary key default gen_random_uuid(), created_at timestamptz not null default now(),
+         service_id text not null, user_id uuid not null references auth.users(id) on delete cascade,
+         author_name text, author_email text, avatar_url text,
+         comment text not null check (char_length(comment) between 3 and 500),
+         is_visible boolean not null default true);
+       alter table public.service_feedback enable row level security;
+       create policy "public read feedback" on public.service_feedback for select to anon, authenticated using (is_visible);
+       create policy "signed-in users add feedback" on public.service_feedback for insert to authenticated with check (auth.uid() = user_id);
+       create policy "users delete own feedback" on public.service_feedback for delete to authenticated using (auth.uid() = user_id);
+
+       Supabase `services` columns: id, title_fr/title_ar (or JSON `title`), description_fr/description_ar
+       (or `desc_*`), video_url, image_url, icon (an ICONS key), sort_order, is_active. RLS must allow SELECT for anon. */
+    const state = { services: [], offers: {}, faqs: [], faqsLoaded: false, status: 'loading', loaded: false, visits: null, user: null };
+    const modalState = { serviceId: null, offerId: null };
+    const fb = { status: 'idle', items: [], panel: 'closed', consent: false, draft: '', sending: false, notice: '', error: '' };
+    const certState = { id: null };
+
+    const sb = (window.supabase && window.supabase.createClient)
+      ? window.supabase.createClient(CONFIG.supabase.url, CONFIG.supabase.anonKey)
+      : null;
+
+    const withTimeout = (promise, ms) => Promise.race([
+      Promise.resolve(promise),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase request timed out')), ms)),
+    ]);
+
+    const pick = (row, keys) => {
+      for (const k of keys) if (row[k] !== undefined && row[k] !== null && row[k] !== '') return row[k];
+      return '';
+    };
+
+    function localized(row, bases, code) {
+      for (const base of bases) {
+        const perLang = row[base + '_' + code];
+        if (perLang) return String(perLang);
+        const col = row[base];
+        if (col && typeof col === 'object' && col[code]) return String(col[code]);
+        if (code === CONFIG.defaultLang && typeof col === 'string' && col) return col;
+      }
+      return '';
+    }
+
+    const isVisible = (row) => row.is_active !== false && row.active !== false && row.published !== false && row.visible !== false && row.is_visible !== false;
+    const sortKey = (row) => { const v = pick(row, ['sort_order', 'position', 'display_order', 'order']); return v === '' ? null : Number(v); };
+    const sortRows = (rows) => rows.slice().sort((a, b) => {
+      const ka = sortKey(a), kb = sortKey(b);
+      if (ka !== null && kb !== null && ka !== kb) return ka - kb;
+      return String(a.created_at || '').localeCompare(String(b.created_at || ''));
+    });
+
+    function mapServiceRow(row, index) {
+      const text = {};
+      LANGS.forEach(({ code }) => {
+        const title = localized(row, ['title', 'name'], code);
+        const desc = localized(row, ['description', 'desc'], code);
+        if (title || desc) text[code] = { title, desc };
+      });
+      const iconKey = String(pick(row, ['icon', 'icon_key']));
+      return {
+        id: pick(row, ['id', 'slug']) || 'row-' + index,
+        icon: ICONS[iconKey] ? iconKey : 'default',
+        video: String(pick(row, ['video_url', 'video'])),
+        image: String(pick(row, ['image_url', 'image', 'cover_url'])),
+        hidden: !isVisible(row),   // hidden in the dashboard: kept in the list so local fallbacks never resurrect it
+        text,
+      };
+    }
+
+    function mapOfferRow(row, index) {
+      const name = {}, note = {};
+      LANGS.forEach(({ code }) => {
+        name[code] = localized(row, ['name', 'title'], code);
+        note[code] = localized(row, ['note', 'description', 'desc'], code);
+      });
+      const features = {};
+      LANGS.forEach(({ code }) => { features[code] = localized(row, ['features'], code).split(/\r?\n/).map((x) => x.trim()).filter(Boolean); });
+      const p = pick(row, ['price', 'amount']);
+      return {
+        id: String(pick(row, ['id']) || 'offer-' + index),
+        name, note, features,
+        price: p === '' ? null : Number(p),
+        currency: String(pick(row, ['currency']) || 'MAD'),
+      };
+    }
+
+    const ServiceRepo = {
+      async list() {
+        if (!sb) throw new Error('The Supabase library did not load');
+        const { data, error } = await withTimeout(sb.from(CONFIG.supabase.table).select('*'), CONFIG.supabase.timeoutMs);
+        if (error) throw error;
+        const rows = sortRows(data || []);
+        if (!rows.length) throw new Error('Table "' + CONFIG.supabase.table + '" returned no rows (empty table, or no SELECT policy for anon)');
+        return rows.map(mapServiceRow);
+      },
+    };
+
+    const OfferRepo = {
+      async byService() {
+        if (!sb) return {};
+        const { data, error } = await withTimeout(sb.from(CONFIG.supabase.offersTable).select('*'), CONFIG.supabase.timeoutMs);
+        if (error) throw error;
+        const grouped = {};
+        sortRows((data || []).filter(isVisible)).forEach((row, i) => {
+          const sid = String(pick(row, ['service_id', 'service']));
+          if (sid) (grouped[sid] = grouped[sid] || []).push(mapOfferRow(row, i));
+        });
+        return grouped;
+      },
+    };
+
+    // Appends the local extra services (e.g. the loyalty card) unless the database already has one with the same id or icon
+    function withLocalExtras(list) {
+      const ids = new Set(list.map((s) => String(s.id)));
+      const icons = new Set(list.map((s) => s.icon));
+      return list.concat(LOCAL_EXTRA_SERVICES.filter((s) => !ids.has(String(s.id)) && !icons.has(s.icon)));
+    }
+
+    const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    function serviceText(service, lang = current) {
+      const def = (service.text && service.text[CONFIG.defaultLang])
+        || (I18N[CONFIG.defaultLang].services && I18N[CONFIG.defaultLang].services[service.id]);
+      const t = (service.text && service.text[lang])
+        || (I18N[lang] && I18N[lang].services && I18N[lang].services[service.id])
+        || def
+        || { title: '', desc: '' };
+      return {
+        title: t.title || (def && def.title) || String(service.id),
+        desc: t.desc || (def && def.desc) || '',
+      };
+    }
+
+    // Offers of a service: Supabase first, then LOCAL_OFFERS, then one "custom quote" option
+    function offersFor(service) {
+      const key = String(service.id);
+      const list = (state.offers[key] && state.offers[key].length) ? state.offers[key] : (LOCAL_OFFERS[key] || []);
+      return list.length ? list : [{ id: 'quote', quote: true, name: {}, note: {}, price: null, currency: 'MAD' }];
+    }
+    function offerName(o, lang) {
+      if (o.quote) return dict(lang).ui.offerQuote;
+      return (o.name && (o.name[lang] || o.name[CONFIG.defaultLang])) || '';
+    }
+    function offerNote(o, lang) {
+      if (o.quote) return dict(lang).ui.offerQuoteNote;
+      return (o.note && (o.note[lang] || o.note[CONFIG.defaultLang])) || '';
+    }
+    function offerFeatures(o, lang) {
+      if (o.quote || !o.features) return [];
+      return (o.features[lang] && o.features[lang].length) ? o.features[lang] : (o.features[CONFIG.defaultLang] || []);
+    }
+    const numberFormat = (lang) => new Intl.NumberFormat(lang === 'ar' ? 'ar-MA-u-nu-latn' : 'fr-FR');
+    function priceText(o, lang) {
+      const d = dict(lang);
+      if (!Number.isFinite(o.price)) return d.ui.priceQuote;
+      const cur = String(o.currency || 'MAD').toUpperCase() === 'MAD' ? d.ui.currMAD : o.currency;
+      return numberFormat(lang).format(o.price) + ' ' + cur;
+    }
+
+    // Certificate name in the active language, falling back to the default language
+    function certName(c, lang = current) {
+      return (c.name && (c.name[lang] || c.name[CONFIG.defaultLang])) || String(c.id);
+    }
+
+    // Allows normal links and relative paths only (blocks javascript:, data: and vbscript:)
+    function safeUrl(url) {
+      const u = String(url || '').trim();
+      return u && !/^\s*(javascript|data|vbscript):/i.test(u) ? u : '';
+    }
+
+    function parseVideo(url) {
+      if (!url || /^\s*(javascript|data|vbscript):/i.test(url)) return null;
+      const yt = String(url).match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
+      if (yt) return { kind: 'youtube', src: 'https://www.youtube-nocookie.com/embed/' + yt[1] + '?rel=0&modestbranding=1' };
+      if (/\.(mp4|webm|ogg)(\?.*)?$/i.test(url)) return { kind: 'file', src: url };
+      return null;
+    }
+
+    const isPdf = (url) => /\.pdf(\?|#|$)/i.test(String(url || ''));
+    const reducedMotion = () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const localeOf = (lang) => (lang === 'ar' ? 'ar-MA-u-nu-latn' : 'fr-FR');
+
+    function userInfo(u) {
+      const m = (u && u.user_metadata) || {};
+      return {
+        id: u.id,
+        email: u.email || m.email || '',
+        name: m.full_name || m.name || String(u.email || '').split('@')[0],
+        avatar: m.avatar_url || m.picture || '',
+      };
+    }
+
+    function avatarMarkup(url, name, size) {
+      const src = /^https:\/\//i.test(String(url || '')) ? url : '';
+      return src
+        ? `<img class="${size} shrink-0 rounded-full bg-brand-light object-cover" src="${esc(src)}" alt="" referrerpolicy="no-referrer" loading="lazy">`
+        : `<span class="${size} grid shrink-0 place-items-center rounded-full bg-brand-light font-bold text-brand" aria-hidden="true">${esc(String(name || '?').trim().charAt(0).toUpperCase() || '?')}</span>`;
+    }
+
+    /* ===== 5) TEMPLATES (pure functions: data in, HTML string out) ===== */
+    const CERT_ICON = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="9" r="6"/><path d="M8.5 14L7 22l5-3 5 3-1.5-8"/></svg>';
+    const SVG_ATTR = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
+
+    const templates = {
+      navDesktop: (label, href) => `<li><a class="nav-link" href="${esc(href)}">${esc(label)}</a></li>`,
+      navMobile:  (label, href) => `<li><a class="block py-3" href="${esc(href)}">${esc(label)}</a></li>`,
+
+      serviceSkeleton: () => `
+        <div class="card animate-pulse p-7" aria-hidden="true">
+          <div class="h-12 w-12 rounded-xl bg-brand-light"></div>
+          <div class="mt-5 h-5 w-2/3 rounded bg-brand-light"></div>
+          <div class="mt-3 h-3 w-full rounded bg-brand-light"></div>
+          <div class="mt-2 h-3 w-5/6 rounded bg-brand-light"></div>
+          <div class="mt-6 h-12 w-full rounded-xl bg-brand-light"></div>
+        </div>`,
+
+      service: (s, txt, orderLabel) => `
+        <article class="card u-lift flex cursor-pointer flex-col p-7" data-service="${esc(s.id)}">
+          <div class="card-icon mb-5">
+            <svg width="24" height="24" ${SVG_ATTR}>${ICONS[s.icon] || ICONS.default}</svg>
+          </div>
+          <h3 class="card-title">${esc(txt.title)}</h3>
+          <p class="card-text mt-2 flex-1">${esc(txt.desc)}</p>
+          <button type="button" class="btn btn-primary u-press u-rise mt-6" data-service="${esc(s.id)}">${esc(orderLabel)}</button>
+        </article>`,
+
+      timelineItem: (t) => `
+        <li class="relative">
+          <span class="timeline-dot"></span>
+          <p class="text-sm font-medium text-brand">${esc(t.period)}</p>
+          <h3 class="font-display text-lg font-bold">${esc(t.title)}</h3>
+          <p class="mt-1 text-slate-600">${esc(t.text)}</p>
+        </li>`,
+
+      // A certificate with a file opens the in-page viewer. Without one it shows a polite message.
+      cert: (c, name, meta, ui) => {
+        const body = `
+          <span class="cert-icon">${CERT_ICON}</span>
+          <h3 class="font-display text-lg font-bold">${esc(name)}</h3>
+          <p class="cert-meta">${esc(meta)}</p>`;
+        return safeUrl(c.file)
+          ? `<button type="button" class="cert u-lift u-press" data-cert-view="${esc(c.id)}">${body}
+               <span class="cert-status cert-on">${esc(ui.certView)}
+                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></span></button>`
+          : `<button type="button" class="cert u-lift u-press" data-cert-unavailable>${body}
+               <span class="cert-status cert-off">${esc(ui.certSoon)}</span></button>`;
+      },
+
+      contactLink: (c, label) => `
+        <li><a class="contact-link u-press u-rise" href="${esc(c.href)}" ${c.external ? 'target="_blank" rel="noopener noreferrer"' : ''}>
+          <span class="text-blue-200">${esc(label)}</span><span dir="ltr" class="font-semibold">${esc(c.value)}</span>
+        </a></li>`,
+
+      offer: (o, name, note, price, features, orderLabel) => `
+        <article class="offer-card" role="listitem">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <h5 class="font-display text-lg font-bold">${esc(name)}</h5>
+              ${note ? `<p class="mt-1 text-sm text-slate-600">${esc(note)}</p>` : ''}
+            </div>
+            <p class="shrink-0 text-end font-display text-xl font-extrabold text-brand-dark" dir="auto">${esc(price)}</p>
+          </div>
+          ${features.length ? `<ul class="mt-3 space-y-1.5 text-sm text-slate-700">${features.map((f) => `<li class="flex items-start gap-2"><svg class="mt-0.5 shrink-0 text-brand" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg><span>${esc(f)}</span></li>`).join('')}</ul>` : ''}
+          <button type="button" class="modal-confirm u-press u-rise mt-4" data-order-offer="${esc(o.id)}">${esc(orderLabel)}</button>
+        </article>`,
+
+      faq: (x, id, open) => `
+        <details class="faq-item group rounded-2xl border border-brand-light bg-white shadow-sm" data-faq="${esc(id)}" ${open ? 'open' : ''}>
+          <summary class="flex cursor-pointer items-center justify-between gap-4 rounded-2xl px-5 py-4 font-display text-lg font-bold transition-colors">
+            <span class="min-w-0" dir="auto">${esc(x.q)}</span>
+            <svg class="faq-chevron shrink-0 text-brand" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+          </summary>
+          <div class="faq-answer px-5 pb-5 leading-relaxed text-slate-600"><p class="whitespace-pre-line" dir="auto">${esc(x.a)}</p></div>
+        </details>`,
+
+      feedbackItem: (f, locale) => {
+        const when = f.created_at ? new Date(f.created_at).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+        return `
+        <li class="rounded-xl border border-brand-light bg-white p-4">
+          <div class="flex items-center gap-3">
+            ${avatarMarkup(f.avatar_url, f.author_name || f.author_email, 'h-9 w-9')}
+            <div class="min-w-0 flex-1">
+              <p class="truncate font-semibold" dir="auto">${esc(f.author_name || '')}</p>
+              <p class="truncate text-start text-xs text-slate-500" dir="ltr">${esc(f.author_email || '')}</p>
+            </div>
+            <time class="shrink-0 text-xs text-slate-500">${esc(when)}</time>
+          </div>
+          <p class="mt-3 whitespace-pre-line break-words text-slate-700" dir="auto">${esc(f.comment || '')}</p>
+        </li>`;
+      },
+
+      fbConsent: (d, checked, signedIn) => `
+        <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
+          <p class="font-semibold">${esc(d.ui.fbWarnTitle)}</p>
+          <p class="mt-1 text-sm">${esc(d.ui.fbWarnText)}</p>
+          <ul class="mt-2 list-disc space-y-1 ps-5 text-sm">
+            <li>${esc(d.ui.fbPolicy1)}</li><li>${esc(d.ui.fbPolicy2)}</li><li>${esc(d.ui.fbPolicy3)}</li>
+          </ul>
+          <label class="mt-3 flex cursor-pointer items-start gap-2 text-sm font-medium">
+            <input type="checkbox" id="fb-consent" class="mt-1 h-4 w-4 shrink-0 accent-blue-700" ${checked ? 'checked' : ''}>
+            <span>${esc(d.ui.fbConsent)}</span>
+          </label>
+          ${fb.error ? `<p class="field-error mt-3" role="alert">${esc(d.ui[fb.error])}</p>` : ''}
+          <div class="mt-4 flex flex-wrap gap-2">
+            <button type="button" id="fb-continue" class="btn btn-primary u-press u-rise !px-4 !py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-50" ${checked ? '' : 'disabled'}>${esc(signedIn ? d.ui.fbContinue : d.ui.fbContinueGoogle)}</button>
+            <button type="button" data-fb-cancel class="btn btn-outline u-press !px-4 !py-2.5 text-sm">${esc(d.ui.cancel)}</button>
+          </div>
+        </div>`,
+
+      fbCompose: (u, d) => `
+        <div class="rounded-xl border border-brand-light bg-brand-mist p-4">
+          <div class="flex items-center gap-3">
+            ${avatarMarkup(u.avatar, u.name || u.email, 'h-9 w-9')}
+            <div class="min-w-0 flex-1">
+              <p class="text-xs text-slate-500">${esc(d.ui.fbSignedAs)}</p>
+              <p class="truncate text-start text-sm font-semibold" dir="ltr">${esc(u.email)}</p>
+            </div>
+            <button type="button" id="fb-signout" class="u-press rounded-md px-2 py-1 text-xs font-semibold text-brand-dark underline">${esc(d.ui.fbSignOut)}</button>
+          </div>
+          <label class="field-label mt-4 block" for="fb-text">${esc(d.ui.fbWriteLabel)}</label>
+          <textarea id="fb-text" rows="4" maxlength="${CONFIG.feedback.maxLength}" dir="auto" class="field-input mt-1.5 min-h-[6rem] resize-y" placeholder="${esc(d.ui.fbPlaceholder)}">${esc(fb.draft)}</textarea>
+          ${fb.error ? `<p class="field-error mt-2" role="alert">${esc(d.ui[fb.error])}</p>` : ''}
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button type="button" id="fb-submit" class="btn btn-primary u-press u-rise !px-4 !py-2.5 text-sm${fb.sending ? ' is-loading' : ''}"><span class="spinner" aria-hidden="true"></span><span>${esc(d.ui.fbSubmit)}</span></button>
+            <button type="button" data-fb-cancel class="btn btn-outline u-press !px-4 !py-2.5 text-sm">${esc(d.ui.cancel)}</button>
+          </div>
+        </div>`,
+    };
+
+    /* ===== 6) RENDERERS (each fills ONE container from the active language) ===== */
+    const $  = (s) => document.querySelector(s);
+    const $$ = (s) => document.querySelectorAll(s);
+    const dict = (code) => I18N[code] || I18N[CONFIG.defaultLang];
+
+    function renderServices(d) {
+      const grid = $('#service-grid');
+      grid.setAttribute('aria-busy', String(state.status === 'loading'));
+      grid.innerHTML = state.status === 'loading'
+        ? [1, 2, 3].map(() => templates.serviceSkeleton()).join('')
+        : (state.services.length
+          ? state.services.map((s) => templates.service(s, serviceText(s), d.ui.order)).join('')
+          : `<p class="col-span-full rounded-2xl bg-brand-mist p-8 text-center text-slate-600">${esc(d.ui.servicesEmpty)}</p>`);
+    }
+
+    // Everything in the service modal that depends on the language (media is NOT touched, so a playing video keeps playing)
+    function renderModalText(d) {
+      const service = findService(modalState.serviceId);
+      if (!service) return;
+      const txt = serviceText(service);
+      $('#modal-title').textContent = txt.title;
+      $('#modal-desc').textContent = txt.desc;
+      $('#modal-icon').innerHTML = `<svg width="24" height="24" ${SVG_ATTR}>${ICONS[service.icon] || ICONS.default}</svg>`;
+      const offers = offersFor(service);
+      $('#modal-offers').innerHTML = offers.map((o) =>
+        templates.offer(o, offerName(o, current), offerNote(o, current), priceText(o, current), offerFeatures(o, current), d.ui.orderNow)
+      ).join('');
+      showCount(state.visits, false);
+      renderFeedback(d);
+    }
+
+    const RENDERERS = [
+      (d) => {
+        $('#nav-desktop').innerHTML = NAV.map(([k, h]) => templates.navDesktop(d.nav[k], h)).join('');
+        $('#nav-mobile').innerHTML  = NAV.map(([k, h]) => templates.navMobile(d.nav[k], h)).join('');
+      },
+      renderServices,
+      renderFaq,
+      renderServiceOptions,
+      renderLeadUi,
+      renderLeadOffer,
+      (d) => { $('#timeline').innerHTML = d.timeline.map(templates.timelineItem).join(''); },
+      (d) => {
+        $('#certs').innerHTML = CERTIFICATES.map((c) =>
+          templates.cert(c, certName(c), [c.issuer, c.year].filter(Boolean).join(', '), d.ui)
+        ).join('');
+      },
+      (d) => { $('#contact-list').innerHTML = CONTACT_LINKS.map((c) => templates.contactLink(c, d.ui[c.key])).join(''); },
+      (d) => { if (modalState.serviceId !== null) renderModalText(d); },
+      () => { if (certState.id !== null) renderCertHead(); },
+    ];
+
+    /* ===== 7) LANGUAGE STATE ===== */
+    let current = '';
+
+    function buildLangToggle() {
+      const box = $('#lang-toggle');
+      LANGS.forEach((l) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'lang-btn u-press';
+        b.textContent = l.label;
+        b.lang = l.code;
+        b.dataset.code = l.code;
+        b.addEventListener('click', () => setLang(l.code));
+        box.appendChild(b);
+      });
+    }
+
+    function applyLang(code) {
+      const meta = LANGS.find((l) => l.code === code) || LANGS[0];
+      const d = dict(meta.code);
+      current = meta.code;
+
+      document.documentElement.lang = meta.code;
+      document.documentElement.dir = meta.dir;
+      document.title = d.docTitle;
+      $('#menu-btn').setAttribute('aria-label', d.ui.menu);
+
+      $$('[data-i18n]').forEach((el) => { el.textContent = d.ui[el.dataset.i18n] ?? ''; });
+      $$('[data-i18n-alt]').forEach((el) => { el.alt = d.ui[el.dataset.i18nAlt] ?? ''; });
+      $$('[data-i18n-aria]').forEach((el) => { el.setAttribute('aria-label', d.ui[el.dataset.i18nAria] ?? ''); });
+      $$('[data-i18n-ph]').forEach((el) => { el.placeholder = d.ui[el.dataset.i18nPh] ?? ''; });
+
+      RENDERERS.forEach((render) => render(d));
+
+      $$('#lang-toggle button').forEach((b) => {
+        const on = b.dataset.code === meta.code;
+        b.setAttribute('aria-pressed', String(on));
+        b.classList.toggle('text-white', on);
+        b.classList.toggle('text-brand-dark', !on);
+      });
+      $('#lang-pill').style.transform = `translateX(${LANGS.indexOf(meta) * 100}%)`;
+    }
+
+    function setLang(code) {
+      if (code === current) return;
+      const app = $('#app');
+      app.classList.add('is-switching');
+      setTimeout(() => { applyLang(code); app.classList.remove('is-switching'); }, 170);
+      try { localStorage.setItem(CONFIG.storageKey, code); } catch (e) { /* storage unavailable */ }
+    }
+
+    /* ===== 8) INTERACTIONS ===== */
+    const menuBtn = $('#menu-btn');
+    const menu = $('#mobile-menu');
+    function setMenu(open) {
+      menu.classList.toggle('open', open);
+      menu.inert = !open;
+      menuBtn.setAttribute('aria-expanded', String(open));
+    }
+    menuBtn.addEventListener('click', () => setMenu(!menu.classList.contains('open')));
+    menu.addEventListener('click', (e) => { if (e.target.closest('a')) setMenu(false); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setMenu(false); });
+
+    // ---- Shared dialog helpers (animated open / close, scroll lock) ----
+    function openDlg(dlg) {
+      clearTimeout(dlg._t);
+      document.documentElement.classList.add('modal-open');
+      if (!dlg.open) dlg.showModal();
+      void dlg.offsetWidth;
+      dlg.classList.add('is-open');
+    }
+    function closeDlg(dlg) {
+      return new Promise((resolve) => {
+        if (!dlg.open) return resolve();
+        dlg.classList.remove('is-open');
+        clearTimeout(dlg._t);
+        dlg._t = setTimeout(() => { dlg.close(); resolve(); }, 230);
+      });
+    }
+    function wireDialog(dlg, onClosed) {
+      dlg.addEventListener('click', (e) => { if (e.target === dlg || e.target.closest('[data-close]')) closeDlg(dlg); });
+      dlg.addEventListener('cancel', (e) => { e.preventDefault(); closeDlg(dlg); });
+      dlg.addEventListener('close', () => {
+        if (!document.querySelector('dialog[open]')) document.documentElement.classList.remove('modal-open');
+        onClosed();
+      });
+    }
+
+    // ---- Service modal ----
+    const modal = $('#service-modal');
+    const findService = (id) => state.services.find((s) => String(s.id) === String(id));
+
+    function mediaMarkup(service, title, d) {
+      const v = parseVideo(service.video);
+      if (v && v.kind === 'youtube') {
+        return `<iframe class="modal-frame" src="${esc(v.src)}" title="${esc(title)}" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+      }
+      if (v && v.kind === 'file') {
+        return `<video class="modal-frame" src="${esc(v.src)}" controls playsinline preload="metadata"></video>`;
+      }
+      const img = safeUrl(service.image);
+      return `<div class="modal-placeholder">
+        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M10 8.5l6 3.5-6 3.5z" fill="currentColor"/></svg>
+        <span class="text-sm font-medium">${esc(d.ui.videoSoon)}</span></div>`
+        + (img ? `<img class="modal-img" src="${esc(img)}" alt="${esc(title)}" loading="lazy" onerror="this.remove()">` : '');
+    }
+
+    // Real visitor counter
+    let countRaf = 0;
+    let shownCount = 0;
+    let visitPoll = 0;
+    function showCount(n, animate) {
+      const el = $('#visit-count');
+      cancelAnimationFrame(countRaf);
+      if (!Number.isFinite(n)) { el.textContent = '\u2014'; return; }
+      const fmt = numberFormat(current);
+      if (!animate || reducedMotion()) { shownCount = n; el.textContent = fmt.format(n); return; }
+      const from = shownCount, t0 = performance.now(), dur = 900;
+      const step = (t) => {
+        const p = Math.min(1, (t - t0) / dur);
+        shownCount = Math.round(from + (n - from) * (1 - Math.pow(1 - p, 3)));
+        el.textContent = fmt.format(shownCount);
+        if (p < 1) countRaf = requestAnimationFrame(step);
+      };
+      countRaf = requestAnimationFrame(step);
+    }
+
+    async function refreshVisits() {
+      if (!sb) return;
+      try {
+        const { data, error } = await withTimeout(sb.rpc('get_visits'), CONFIG.supabase.timeoutMs);
+        if (error) throw error;
+        const n = Number(data);
+        if (Number.isFinite(n)) { state.visits = n; if (modalState.serviceId !== null) showCount(n, true); }
+      } catch (err) { console.warn('Could not refresh the visitor counter', err); }
+    }
+
+    async function trackVisit() {
+      if (!sb) return;
+      let first = true;
+      try { first = !sessionStorage.getItem(CONFIG.visitsKey); } catch (e) { /* storage unavailable */ }
+      try {
+        const { data, error } = await withTimeout(sb.rpc(first ? 'register_visit' : 'get_visits'), CONFIG.supabase.timeoutMs);
+        if (error) throw error;
+        if (first) { try { sessionStorage.setItem(CONFIG.visitsKey, '1'); } catch (e) { /* ignore */ } }
+        const n = Number(data);
+        if (Number.isFinite(n)) state.visits = n;
+      } catch (err) { console.warn('Could not register the visit', err); }
+    }
+
+    function openServiceModal(id, opts) {
+      const service = findService(id);
+      if (!service) return;
+      const compose = !!(opts && opts.compose && state.user);
+      const d = dict(current);
+      modalState.serviceId = service.id;
+      Object.assign(fb, { status: 'loading', items: [], panel: compose ? 'compose' : 'closed', consent: compose, draft: '', sending: false, notice: '', error: '' });
+      $('#modal-media').innerHTML = mediaMarkup(service, serviceText(service).title, d);
+      shownCount = 0;
+      renderModalText(d);
+      showCount(state.visits, true);
+      openDlg(modal);
+      modal.querySelectorAll('.modal-grid, .modal-col').forEach((el) => { el.scrollTop = 0; });
+      loadFeedback(service.id);
+      refreshVisits();
+      clearInterval(visitPoll);
+      visitPoll = setInterval(refreshVisits, 20000);   // the counter updates by itself while the window is open
+    }
+
+    wireDialog(modal, () => {
+      $('#modal-media').innerHTML = '';
+      modalState.serviceId = null;
+      clearInterval(visitPoll);
+      cancelAnimationFrame(countRaf);
+    });
+
+    $('#service-grid').addEventListener('click', (e) => {
+      const el = e.target.closest('[data-service]');
+      if (el) openServiceModal(el.dataset.service);
+    });
+
+    // "Order now" on an offer card: pre-fills the request form with service + that offer + its price, then scrolls to it
+    $('#modal-offers').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-order-offer]');
+      if (!btn) return;
+      const service = findService(modalState.serviceId);
+      if (!service) return;
+      const offers = offersFor(service);
+      const offer = offers.find((o) => String(o.id) === btn.dataset.orderOffer) || offers[0];
+      leadState.offer = { serviceId: String(service.id), offer };
+      delete leadState.errors.service;
+      $('#lead-service').value = String(service.id);
+      renderLeadOffer(dict(current));
+      renderLeadUi(dict(current));
+      closeDlg(modal).then(() => {
+        const reduce = reducedMotion();
+        $('#request').scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+        setTimeout(() => $('#lead-name').focus({ preventScroll: true }), reduce ? 0 : 600);
+      });
+    });
+
+    // ---- Customer feedback (Supabase table + Google sign-in) ----
+    async function loadFeedback(id) {
+      fb.status = 'loading'; fb.items = [];
+      renderFeedback(dict(current));
+      if (!sb) { fb.status = 'error'; renderFeedback(dict(current)); return; }
+      try {
+        const { data, error } = await withTimeout(
+          sb.from(CONFIG.feedback.table).select('*').eq('service_id', String(id)).order('created_at', { ascending: false }).limit(50),
+          CONFIG.supabase.timeoutMs);
+        if (error) throw error;
+        if (modalState.serviceId !== id) return;
+        fb.items = (data || []).filter(isVisible);
+        fb.status = 'ready';
+      } catch (err) {
+        if (modalState.serviceId !== id) return;
+        console.warn('Could not load feedback', err);
+        fb.status = 'error';
+      }
+      renderFeedback(dict(current));
+    }
+
+    function renderFeedback(d) {
+      const list = $('#fb-list');
+      if (fb.status === 'loading') list.innerHTML = `<li class="text-sm text-slate-500">${esc(d.ui.fbLoading)}</li>`;
+      else if (fb.status === 'error') list.innerHTML = `<li class="text-sm text-slate-500">${esc(d.ui.fbError)}</li>`;
+      else if (!fb.items.length) list.innerHTML = `<li class="rounded-xl bg-brand-mist px-4 py-5 text-center text-sm text-slate-600">${esc(d.ui.fbEmpty)}</li>`;
+      else list.innerHTML = fb.items.map((f) => templates.feedbackItem(f, localeOf(current))).join('');
+
+      $('#fb-add').classList.toggle('hidden', fb.panel !== 'closed');
+      const notice = $('#fb-notice');
+      notice.hidden = !fb.notice;
+      notice.textContent = fb.notice ? d.ui[fb.notice] : '';
+
+      const panel = $('#fb-panel');
+      if (fb.panel === 'consent') { panel.hidden = false; panel.innerHTML = templates.fbConsent(d, fb.consent, !!state.user); }
+      else if (fb.panel === 'compose' && state.user) { panel.hidden = false; panel.innerHTML = templates.fbCompose(state.user, d); }
+      else { panel.hidden = true; panel.innerHTML = ''; }
+    }
+
+    async function startGoogleSignIn() {
+      if (!sb) { fb.error = 'fbNoBackend'; renderFeedback(dict(current)); return; }
+      try { sessionStorage.setItem(CONFIG.pendingKey, String(modalState.serviceId)); } catch (e) { /* ignore */ }
+      const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + window.location.pathname } });
+      if (error) {
+        console.error('Google sign-in failed', error);
+        try { sessionStorage.removeItem(CONFIG.pendingKey); } catch (e) { /* ignore */ }
+        fb.error = 'fbAuthFail';
+        renderFeedback(dict(current));
+      }
+    }
+
+    async function submitFeedback() {
+      if (fb.sending || !state.user || !sb) return;
+      const text = fb.draft.trim();
+      if (text.length < CONFIG.feedback.minLength) { fb.error = 'fbTooShort'; renderFeedback(dict(current)); return; }
+      fb.sending = true; fb.error = '';
+      renderFeedback(dict(current));
+      const u = state.user;
+      const row = {
+        service_id: String(modalState.serviceId), user_id: u.id,
+        author_name: u.name, author_email: u.email, avatar_url: u.avatar || null,
+        comment: text.slice(0, CONFIG.feedback.maxLength),
+      };
+      try {
+        const { data, error } = await withTimeout(sb.from(CONFIG.feedback.table).insert([row]).select().single(), CONFIG.supabase.timeoutMs);
+        if (error) throw error;
+        fb.items.unshift(data || Object.assign({ created_at: new Date().toISOString() }, row));
+        fb.status = 'ready'; fb.draft = ''; fb.panel = 'closed'; fb.notice = 'fbThanks';
+      } catch (err) {
+        console.error('Could not publish the feedback', err);
+        fb.error = 'fbSendFail';
+      } finally {
+        fb.sending = false;
+      }
+      renderFeedback(dict(current));
+    }
+
+    $('#fb-wrap').addEventListener('click', async (e) => {
+      if (e.target.closest('#fb-add')) {
+        Object.assign(fb, { panel: 'consent', notice: '', error: '' });
+        renderFeedback(dict(current));
+      } else if (e.target.closest('#fb-continue')) {
+        if (!fb.consent) return;
+        fb.error = '';
+        if (state.user) { fb.panel = 'compose'; renderFeedback(dict(current)); setTimeout(() => { const t = $('#fb-text'); if (t) t.focus(); }, 0); }
+        else await startGoogleSignIn();
+      } else if (e.target.closest('[data-fb-cancel]')) {
+        Object.assign(fb, { panel: 'closed', error: '' });
+        renderFeedback(dict(current));
+      } else if (e.target.closest('#fb-signout')) {
+        if (sb) await sb.auth.signOut();
+        state.user = null;
+        Object.assign(fb, { panel: 'closed', consent: false, draft: '', error: '' });
+        renderFeedback(dict(current));
+      } else if (e.target.closest('#fb-submit')) {
+        submitFeedback();
+      }
+    });
+    $('#fb-wrap').addEventListener('change', (e) => {
+      if (e.target.id !== 'fb-consent') return;
+      fb.consent = e.target.checked;
+      const btn = $('#fb-continue');
+      if (btn) btn.disabled = !fb.consent;
+    });
+    $('#fb-wrap').addEventListener('input', (e) => { if (e.target.id === 'fb-text') fb.draft = e.target.value; });
+
+    // ---- Certificates: in-page viewer (image or PDF), polite message when no file exists ----
+    const certModal = $('#cert-modal');
+    const toast = $('#toast');
+    let toastTimer = 0;
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    function renderCertHead() {
+      const c = CERTIFICATES.find((x) => String(x.id) === String(certState.id));
+      if (!c) return;
+      $('#cert-title').textContent = certName(c);
+      $('#cert-meta').textContent = [c.issuer, c.year].filter(Boolean).join(', ');
+    }
+
+    function openCert(id) {
+      const c = CERTIFICATES.find((x) => String(x.id) === String(id));
+      const href = c && safeUrl(c.file);
+      if (!href) return;
+      const d = dict(current);
+      certState.id = c.id;
+      renderCertHead();
+      $('#cert-open').href = href;
+      const stage = $('#cert-stage');
+      if (isPdf(href)) {
+        stage.innerHTML = `<object class="viewer-frame" data="${esc(href)}" type="application/pdf" aria-label="${esc(certName(c))}">
+          <div class="viewer-fallback"><p>${esc(d.ui.certPdfFallback)}</p>
+          <a class="btn btn-primary u-press" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(d.ui.certOpen)}</a></div></object>`;
+      } else {
+        stage.innerHTML = `<img class="viewer-img" src="${esc(href)}" alt="${esc(certName(c))}">`;
+        stage.querySelector('img').addEventListener('error', () => {
+          stage.innerHTML = `<div class="viewer-fallback"><p>${esc(d.ui.certLoadError)}</p></div>`;
+        });
+      }
+      openDlg(certModal);
+    }
+
+    wireDialog(certModal, () => { $('#cert-stage').innerHTML = ''; certState.id = null; });
+
+    $('#certs').addEventListener('click', (e) => {
+      const view = e.target.closest('[data-cert-view]');
+      if (view) { openCert(view.dataset.certView); return; }
+      if (e.target.closest('[data-cert-unavailable]')) showToast(dict(current).ui.certUnavailable);
+    });
+
+    /* ===== 8b) LEAD FORM -> Supabase `leads` table =====
+       One-time setup (Supabase SQL editor). Column names must match CONFIG.leads.columns:
+
+         create table public.leads (
+           id uuid primary key default gen_random_uuid(),
+           created_at timestamptz not null default now(),
+           full_name text not null, business_name text not null, phone text not null,
+           service_type text not null, message text, email text
+         );
+         -- table already exists?  run this once BEFORE publishing this page (the insert fails if the column is missing):
+         alter table public.leads add column if not exists email text;
+         alter table public.leads enable row level security;
+         create policy "anyone can send a lead" on public.leads for insert to anon with check (true);
+
+       The page only INSERTS, so no SELECT policy is needed. */
+    const OTHER_VALUE = '__other';
+    const LEAD_KEYS = ['name', 'business', 'phone', 'email', 'service', 'message'];
+    const leadState = { errors: {}, status: null, sending: false, offer: null };
+
+    function renderServiceOptions(d) {
+      const sel = $('#lead-service');
+      const previous = sel.value;
+      sel.innerHTML = '<option value="" selected>' + esc(d.ui.selectPlaceholder) + '</option>'
+        + state.services.map((s) => '<option value="' + esc(s.id) + '">' + esc(serviceText(s).title) + '</option>').join('')
+        + '<option value="' + OTHER_VALUE + '">' + esc(d.ui.optOther) + '</option>';
+      if (previous && Array.prototype.some.call(sel.options, (o) => o.value === previous)) sel.value = previous;
+    }
+
+    // Banner showing the offer picked in the service modal
+    function renderLeadOffer(d) {
+      const box = $('#lead-offer');
+      const sel = leadState.offer;
+      const service = sel && findService(sel.serviceId);
+      if (!sel || !service) { box.hidden = true; box.innerHTML = ''; return; }
+      const fresh = box.hidden;
+      box.hidden = false;
+      box.innerHTML = `
+        <div class="${fresh ? 'status-in ' : ''}flex items-center gap-3 rounded-xl border border-brand-light bg-brand-mist p-4">
+          <span class="card-icon h-10 w-10 shrink-0"><svg width="20" height="20" ${SVG_ATTR}>${ICONS[service.icon] || ICONS.default}</svg></span>
+          <div class="min-w-0 flex-1">
+            <p class="text-xs font-semibold text-brand">${esc(d.ui.offerChosen)}</p>
+            <p class="font-semibold">${esc(serviceText(service).title)} &middot; ${esc(offerName(sel.offer, current))}</p>
+            <p class="text-sm text-slate-600" dir="auto">${esc(priceText(sel.offer, current))}</p>
+          </div>
+          <button type="button" data-offer-clear class="u-press rounded-md p-1.5 hover:bg-white" aria-label="${esc(d.ui.offerClear)}">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>`;
+    }
+
+    $('#lead-offer').addEventListener('click', (e) => {
+      if (e.target.closest('[data-offer-clear]')) { leadState.offer = null; renderLeadOffer(dict(current)); }
+    });
+
+    function renderLeadUi(d) {
+      LEAD_KEYS.forEach((key) => {
+        const msgKey = leadState.errors[key];
+        const err = $('#err-' + key);
+        err.hidden = !msgKey;
+        err.textContent = msgKey ? d.ui[msgKey] : '';
+        $('#lead-' + key).setAttribute('aria-invalid', msgKey ? 'true' : 'false');
+      });
+
+      const box = $('#lead-status');
+      const st = leadState.status;
+      if (!st) { box.hidden = true; box.innerHTML = ''; return; }
+      const ok = st.kind === 'success';
+      const wa = CONTACT_LINKS.find((c) => c.key === 'whatsapp');
+      const icon = ok
+        ? '<circle cx="12" cy="12" r="10"/><path d="M8 12.5l3 3 5-6"/>'
+        : '<circle cx="12" cy="12" r="10"/><path d="M12 7v6M12 16.5v.5"/>';
+      box.hidden = false;
+      box.innerHTML = `
+        <div class="${st.fresh ? 'status-in ' : ''}flex items-start gap-3 rounded-xl border p-4 ${ok ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-red-200 bg-red-50 text-red-900'}">
+          <svg class="mt-0.5 shrink-0" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icon}</svg>
+          <div class="min-w-0 flex-1">
+            <p class="font-semibold">${esc(d.ui[st.title])}</p>
+            <p class="mt-0.5 text-sm">${esc(d.ui[st.text])}</p>
+            ${!ok && wa ? `<a class="mt-2 inline-block text-sm font-semibold underline" href="${esc(wa.href)}" target="_blank" rel="noopener noreferrer">${esc(d.ui.waLabel)}</a>` : ''}
+          </div>
+          <button type="button" data-status-close class="u-press rounded-md p-1" aria-label="${esc(d.ui.statusClose)}">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>`;
+      st.fresh = false;
+    }
+
+    function setStatus(kind, title, text) {
+      leadState.status = { kind, title, text, fresh: true };
+      renderLeadUi(dict(current));
+      $('#lead-status').scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'center' });
+    }
+
+    const toLatinDigits = (str) => str
+      .replace(/[\u0660-\u0669]/g, (c) => String(c.charCodeAt(0) - 0x0660))
+      .replace(/[\u06F0-\u06F9]/g, (c) => String(c.charCodeAt(0) - 0x06F0));
+    function normalizePhone(raw) {
+      const t = toLatinDigits(String(raw)).replace(/[\s().-]/g, '');
+      return t.startsWith('00') ? '+' + t.slice(2) : t;
+    }
+    const PHONE_RE = /^\+?\d{8,15}$/;
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;   // optional field: checked only when something is typed
+
+    function readLead(form) {
+      const f = new FormData(form);
+      const one = (k) => String(f.get(k) || '').replace(/\s+/g, ' ').trim();
+      return {
+        name: one('name'),
+        business: one('business'),
+        phone: normalizePhone(f.get('phone') || ''),
+        email: one('email').toLowerCase(),
+        service: String(f.get('service') || ''),
+        message: String(f.get('message') || '').trim(),
+        trap: String(f.get('website') || ''),
+      };
+    }
+
+    function validateLead(v) {
+      const e = {};
+      if (v.name.length < 2) e.name = 'errName';
+      if (v.business.length < 2) e.business = 'errBusiness';
+      if (!PHONE_RE.test(v.phone)) e.phone = 'errPhone';
+      if (v.email && (v.email.length > 254 || !EMAIL_RE.test(v.email))) e.email = 'errEmail';
+      if (!v.service) e.service = 'errService';
+      if (v.message.length > 1000) e.message = 'errMessage';
+      return e;
+    }
+
+    function serviceLabel(value) {
+      if (value === OTHER_VALUE) return I18N[CONFIG.defaultLang].ui.optOther;
+      const svc = findService(value);
+      return svc ? serviceText(svc, CONFIG.defaultLang).title : value;
+    }
+
+    function buildLeadRow(v) {
+      const c = CONFIG.leads.columns;
+      const row = {};
+      const set = (col, val) => { if (col) row[col] = val; };
+      const picked = leadState.offer && String(leadState.offer.serviceId) === v.service ? leadState.offer.offer : null;
+      let message = v.message;
+      if (picked) {
+        const line = 'Offre : ' + offerName(picked, CONFIG.defaultLang) + ' | Prix : ' + priceText(picked, CONFIG.defaultLang);
+        message = message ? line + '\n' + message : line;
+      }
+      set(c.name, v.name);
+      set(c.business, v.business);
+      set(c.phone, v.phone);
+      set(c.email, v.email || null);
+      set(c.service, serviceLabel(v.service));
+      set(c.message, message || null);
+      set(c.offer, picked ? offerName(picked, CONFIG.defaultLang) : null);
+      set(c.price, picked && Number.isFinite(picked.price) ? picked.price : null);
+      if (v.service !== OTHER_VALUE) set(c.serviceId, v.service);
+      return row;
+    }
+
+    const leadForm = $('#lead-form');
+    const leadSubmit = $('#lead-submit');
+
+    function leadSent() {
+      setStatus('success', 'okTitle', 'okText');
+      leadForm.reset();
+      leadState.errors = {};
+      leadState.offer = null;
+      renderLeadOffer(dict(current));
+      renderServiceOptions(dict(current));
+    }
+
+    ['input', 'change'].forEach((evt) => leadForm.addEventListener(evt, (e) => {
+      if (e.target.id === 'lead-service' && leadState.offer && String(leadState.offer.serviceId) !== e.target.value) {
+        leadState.offer = null;
+        renderLeadOffer(dict(current));
+      }
+      const key = e.target.dataset && e.target.dataset.key;
+      if (key && leadState.errors[key]) { delete leadState.errors[key]; renderLeadUi(dict(current)); }
+    }));
+
+    $('#lead-status').addEventListener('click', (e) => {
+      if (e.target.closest('[data-status-close]')) { leadState.status = null; renderLeadUi(dict(current)); }
+    });
+
+    leadForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (leadState.sending) return;
+
+      const v = readLead(leadForm);
+      leadState.status = null;
+      leadState.errors = validateLead(v);
+      renderLeadUi(dict(current));
+      const firstBad = LEAD_KEYS.find((k) => leadState.errors[k]);
+      if (firstBad) { $('#lead-' + firstBad).focus(); return; }
+
+      if (v.trap) { leadSent(); return; }   // bots fill the hidden field: pretend it worked, send nothing
+
+      leadState.sending = true;
+      leadSubmit.classList.add('is-loading');
+      leadSubmit.setAttribute('aria-busy', 'true');
+      try {
+        if (!sb) throw new Error('The Supabase library did not load');
+        if (navigator.onLine === false) throw new Error('offline: network unavailable');
+        const { error } = await withTimeout(sb.from(CONFIG.leads.table).insert([buildLeadRow(v)]), CONFIG.leads.timeoutMs);
+        if (error) throw error;
+        leadSent();
+      } catch (err) {
+        console.error('Could not send the request', err);
+        const network = navigator.onLine === false || /fetch|network|offline|timed out/i.test(String((err && err.message) || err));
+        setStatus('error', 'failTitle', network ? 'failNet' : 'failGeneric');
+      } finally {
+        leadState.sending = false;
+        leadSubmit.classList.remove('is-loading');
+        leadSubmit.removeAttribute('aria-busy');
+      }
+    });
+
+    /* ===== 9) INIT ===== */
+    $('#year').textContent = new Date().getFullYear();
+    setMenu(false);
+    buildLangToggle();
+
+    if (sb) {
+      sb.auth.onAuthStateChange((_event, session) => {
+        state.user = session ? userInfo(session.user) : null;
+        if (modalState.serviceId !== null) renderFeedback(dict(current));
+      });
+    }
+
+    /* ===== LIVE CATALOG: the same Supabase tables that admin.html writes to ===== */
+    const DEBUG = /[?&]debug(=|&|$)/.test(location.search);   // open index.html?debug to see where the data comes from
+    const debugInfo = { source: '-', error: '', at: '' };
+    function renderDebug() {
+      if (!DEBUG) return;
+      let el = document.getElementById('debug-box');
+      if (!el) {
+        el = document.createElement('pre'); el.id = 'debug-box'; el.dir = 'ltr';
+        el.className = 'fixed bottom-3 left-3 z-[70] max-w-[92vw] whitespace-pre-wrap rounded-xl bg-ink/95 p-3 text-xs text-white shadow-xl';
+        document.body.appendChild(el);
+      }
+      el.textContent = 'source: ' + debugInfo.source + '\nservices shown: ' + state.services.length + '\noffers (services with offers): ' + Object.keys(state.offers).length + '\nfaqs: ' + state.faqs.length
+        + '\nupdated: ' + debugInfo.at + (debugInfo.error ? '\nerror: ' + debugInfo.error : '');
+    }
+
+    let catalogBusy = false, catalogAgain = false;
+    async function loadCatalog() {
+      if (catalogBusy) { catalogAgain = true; return; }
+      catalogBusy = true;
+      try {
+        let services;
+        try {
+          services = await ServiceRepo.list();
+          debugInfo.source = 'supabase'; debugInfo.error = ''; state.loaded = true;
+        } catch (err) {
+          console.warn('Could not load services from Supabase.', err);
+          debugInfo.error = String((err && err.message) || err);
+          if (state.loaded) { renderDebug(); return; }   // transient error after a good load: keep what is on screen
+          debugInfo.source = 'LOCAL FALLBACK (Supabase not read)';
+          services = SERVICES;
+        }
+        try { state.offers = await OfferRepo.byService(); }
+        catch (err) { console.warn('Could not load offers from Supabase.', err); debugInfo.error = debugInfo.error || ('offers: ' + String((err && err.message) || err)); }
+
+        state.services = withLocalExtras(services).filter((s) => !s.hidden);
+        state.status = 'ready';
+        debugInfo.at = new Date().toLocaleTimeString();
+        const d = dict(current);
+        renderServices(d); renderServiceOptions(d); renderLeadOffer(d);
+        if (modalState.serviceId !== null) { if (findService(modalState.serviceId)) renderModalText(d); else closeDlg(modal); }
+        renderDebug();
+      } finally {
+        catalogBusy = false;
+        if (catalogAgain) { catalogAgain = false; loadCatalog(); }
+      }
+    }
+
+    /* ===== FAQ: Supabase table `service_faqs` -> accordion + FAQPage JSON-LD ===== */
+    const faqOpen = new Set();   // keeps opened questions open when the language is switched
+
+    const FaqRepo = {
+      async list() {
+        if (!sb) return [];
+        const { data, error } = await withTimeout(
+          sb.from(CONFIG.supabase.faqTable).select('*').eq('is_active', true).order('sort_order', { ascending: true }),
+          CONFIG.supabase.timeoutMs);
+        if (error) throw error;
+        return data || [];
+      },
+    };
+
+    // Question / answer in the active language, falling back to the default language
+    function faqText(row, lang) {
+      const q = row['question_' + lang] || row['question_' + CONFIG.defaultLang] || '';
+      const a = row['answer_' + lang] || row['answer_' + CONFIG.defaultLang] || '';
+      return { q: String(q).trim(), a: String(a).trim() };
+    }
+
+    // FAQPage structured data for the language the visitor is actually reading (the marked-up text must be visible on the page)
+    function updateFaqSchema(items) {
+      let el = document.getElementById('faq-jsonld');
+      if (!items.length) { if (el) el.remove(); return; }
+      if (!el) {
+        el = document.createElement('script');
+        el.type = 'application/ld+json';
+        el.id = 'faq-jsonld';
+        document.head.appendChild(el);
+      }
+      const data = {
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        inLanguage: current,
+        mainEntity: items.map((x) => ({ '@type': 'Question', name: x.q, acceptedAnswer: { '@type': 'Answer', text: x.a } })),
+      };
+      el.textContent = JSON.stringify(data).replace(/</g, '\\u003c');   // can never close the <script> tag early
+    }
+
+    function renderFaq() {
+      const section = $('#faq-section');
+      const rows = state.faqs
+        .map((r) => Object.assign({ id: String(r.id) }, faqText(r, current)))
+        .filter((x) => x.q && x.a);
+      section.hidden = !rows.length;
+      $('#faq-list').innerHTML = rows.map((x) => templates.faq(x, x.id, faqOpen.has(x.id))).join('');
+      updateFaqSchema(rows);
+    }
+
+    // `toggle` does not bubble, so it is listened to in the capture phase
+    $('#faq-list').addEventListener('toggle', (e) => {
+      const d = e.target && e.target.closest && e.target.closest('details[data-faq]');
+      if (!d) return;
+      if (d.open) faqOpen.add(d.dataset.faq); else faqOpen.delete(d.dataset.faq);
+    }, true);
+
+    async function loadFAQs() {
+      try {
+        state.faqs = await FaqRepo.list();
+        state.faqsLoaded = true;
+      } catch (err) {
+        console.warn('Could not load the FAQ from Supabase.', err);
+        debugInfo.error = debugInfo.error || ('faq: ' + String((err && err.message) || err));
+        if (!state.faqsLoaded) state.faqs = [];   // transient error after a good load: keep what is on screen
+      }
+      renderFaq();
+      renderDebug();
+    }
+    let faqTimer = 0;
+    const scheduleFaqReload = () => { clearTimeout(faqTimer); faqTimer = setTimeout(loadFAQs, 400); };
+
+    // Changes made in admin.html show up by themselves: realtime push, plus a refresh on focus and every 60 s as a safety net
+    let reloadTimer = 0;
+    const scheduleReload = () => { clearTimeout(reloadTimer); reloadTimer = setTimeout(loadCatalog, 400); };
+    function watchCatalog() {
+      if (sb && sb.channel) {
+        sb.channel('catalog')
+          .on('postgres_changes', { event: '*', schema: 'public', table: CONFIG.supabase.table }, scheduleReload)
+          .on('postgres_changes', { event: '*', schema: 'public', table: CONFIG.supabase.offersTable }, scheduleReload)
+          .on('postgres_changes', { event: '*', schema: 'public', table: CONFIG.supabase.faqTable }, scheduleFaqReload)
+          .subscribe();
+      }
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) { scheduleReload(); scheduleFaqReload(); } });
+      setInterval(() => { if (!document.hidden) { loadCatalog(); loadFAQs(); } }, 60000);
+    }
+
+    async function init() {
+      let saved = CONFIG.defaultLang;
+      try { saved = localStorage.getItem(CONFIG.storageKey) || CONFIG.defaultLang; } catch (e) { /* ignore */ }
+      applyLang(saved);
+
+      const visitsDone = trackVisit();
+      await Promise.all([loadCatalog(), loadFAQs()]);
+      watchCatalog();
+      await visitsDone;
+
+      // Back from the Google sign-in: reopen the service the visitor was reviewing, ready to write
+      if (sb) {
+        try { const { data } = await sb.auth.getSession(); state.user = data.session ? userInfo(data.session.user) : null; } catch (e) { /* ignore */ }
+        let pending = null;
+        try { pending = sessionStorage.getItem(CONFIG.pendingKey); sessionStorage.removeItem(CONFIG.pendingKey); } catch (e) { /* ignore */ }
+        if (pending && state.user && findService(pending)) {
+          document.getElementById('services').scrollIntoView({ behavior: 'auto', block: 'start' });
+          openServiceModal(findService(pending).id, { compose: true });
+        }
+      }
+    }
+    init();
+  </script>
+</body>
+</html>

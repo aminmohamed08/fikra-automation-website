@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow, noarchive" />
+  <meta name="referrer" content="no-referrer" />
+  <title>Fikra Admin</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: {
+      fontFamily: { sans: ['Cairo', 'system-ui', 'sans-serif'] },
+      colors: { ink: '#0B2545', brand: { DEFAULT: '#1D4ED8', dark: '#1E3A8A', light: '#DBEAFE', mist: '#F3F7FF' } },
+    } } };
+  </script>
+
+  <!--
+  ======================= ONE-TIME SETUP (Supabase) =======================
+  The real protection lives in Supabase (server side). Nothing in this HTML file can be trusted by itself.
+
+  1) Authentication > Sign In / Providers > Email:  turn OFF "Allow new users to sign up".
+     Authentication > Users > Add user: create ONLY your own account (email + strong password), then copy its UUID.
+     Authentication > Multi-Factor: make sure TOTP is enabled.
+
+  2) SQL editor (replace PASTE-YOUR-USER-UUID-HERE). Safe to run again.
+
+     create or replace function public.is_admin() returns boolean
+       language sql stable security definer set search_path = public as $$
+       select auth.uid() = 'PASTE-YOUR-USER-UUID-HERE'::uuid
+          and coalesce(auth.jwt() ->> 'aal', '') = 'aal2';      -- password AND 2FA code
+     $$;
+     revoke all on function public.is_admin() from public, anon;
+     grant execute on function public.is_admin() to authenticated;
+
+     alter table public.services_type
+       add column if not exists title_fr text, add column if not exists title_ar text,
+       add column if not exists description_fr text, add column if not exists description_ar text,
+       add column if not exists icon text, add column if not exists video_url text, add column if not exists image_url text,
+       add column if not exists sort_order int default 0, add column if not exists is_active boolean default true;
+
+     create policy "admin manages services" on public.services_type
+       for all to authenticated using (public.is_admin()) with check (public.is_admin());
+     create policy "admin manages offers" on public.service_offers
+       for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
+     (service_offers and service_faqs are created by the SQL comment in index.html, section 4b.)
+
+  3) Image / video / PDF uploads: a public bucket that only you can write to. Safe to run again.
+
+     insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+     values ('service-media', 'service-media', true, 52428800,
+             array['image/jpeg','image/png','image/webp','image/gif','video/mp4','video/webm','application/pdf'])
+     on conflict (id) do update set public = true, file_size_limit = 52428800,
+             allowed_mime_types = excluded.allowed_mime_types;
+     drop policy if exists "admin uploads media" on storage.objects;
+     drop policy if exists "admin updates media" on storage.objects;
+     drop policy if exists "admin deletes media" on storage.objects;
+     create policy "admin uploads media" on storage.objects for insert to authenticated
+       with check (bucket_id = 'service-media' and public.is_admin());
+     create policy "admin updates media" on storage.objects for update to authenticated
+       using (bucket_id = 'service-media' and public.is_admin()) with check (bucket_id = 'service-media' and public.is_admin());
+     create policy "admin deletes media" on storage.objects for delete to authenticated
+       using (bucket_id = 'service-media' and public.is_admin());
+
+  4) Country (Morocco) and device restrictions cannot be enforced by a static page: a script in the browser
+     can be bypassed. Enforce them in front of this file, for example with Cloudflare Access (free for 1 user):
+     an Access application on /admin.html with a policy that requires your email + Country = Morocco
+     + a device rule (WARP / device posture, or a client certificate installed only on your computer).
+     Even without it, nobody but you can read or change data: the database refuses every other account.
+
+  5) Tables for the "Certificates" and "Career pathway" tabs (the FAQ tab uses service_faqs). Safe to run again.
+
+     create table if not exists public.site_certificates (
+       id uuid primary key default gen_random_uuid(), created_at timestamptz not null default now(),
+       title_fr text not null, title_ar text, issuer text, year text, credential_url text, file_url text,
+       sort_order int default 0, is_active boolean default true);
+     create table if not exists public.site_career (
+       id uuid primary key default gen_random_uuid(), created_at timestamptz not null default now(),
+       title_fr text not null, title_ar text, text_fr text, text_ar text, period_fr text, period_ar text, icon text,
+       sort_order int default 0, is_active boolean default true);
+
+     alter table public.site_certificates enable row level security;
+     alter table public.site_career enable row level security;
+     alter table public.service_faqs enable row level security;
+
+     drop policy if exists "public read certificates" on public.site_certificates;
+     drop policy if exists "admin manages certificates" on public.site_certificates;
+     create policy "public read certificates" on public.site_certificates for select to anon, authenticated using (is_active);
+     create policy "admin manages certificates" on public.site_certificates for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
+     drop policy if exists "public read career" on public.site_career;
+     drop policy if exists "admin manages career" on public.site_career;
+     create policy "public read career" on public.site_career for select to anon, authenticated using (is_active);
+     create policy "admin manages career" on public.site_career for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
+     drop policy if exists "admin manages faqs" on public.service_faqs;
+     create policy "admin manages faqs" on public.service_faqs for all to authenticated using (public.is_admin()) with check (public.is_admin());
+  =========================================================================
+  -->
+</head>
+
+<body class="min-h-screen bg-brand-mist font-sans text-ink antialiased">
+
+  <!-- GATE: login, 2FA code, 2FA enrolment, access denied -->
+  <main id="gate" class="grid min-h-screen place-items-center p-5">
+    <div class="w-full max-w-md rounded-3xl border border-brand-light bg-white p-7 shadow-xl shadow-brand/10 sm:p-9">
+      <p class="font-extrabold tracking-tight text-brand">Fikra Automation</p>
+      <h1 class="mt-1 text-2xl font-extrabold">لوحة التحكم</h1>
+
+      <form id="step-login" class="mt-6 space-y-4" autocomplete="on">
+        <label class="block text-sm font-semibold">البريد الإلكتروني
+          <input id="email" type="email" dir="ltr" required autocomplete="username" class="fld mt-1.5">
+        </label>
+        <label class="block text-sm font-semibold">كلمة السر
+          <input id="password" type="password" dir="ltr" required autocomplete="current-password" class="fld mt-1.5">
+        </label>
+        <p id="login-msg" class="hidden text-sm font-semibold text-red-600" role="alert"></p>
+        <button id="login-btn" class="btn-primary w-full" type="submit">دخول</button>
+      </form>
+
+      <form id="step-mfa" class="mt-6 hidden space-y-4">
+        <p class="text-sm text-slate-600">أدخل الرمز المكوّن من 6 أرقام من تطبيق المصادقة.</p>
+        <input id="mfa-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" dir="ltr" required class="fld text-center text-2xl tracking-[0.5em]">
+        <p id="mfa-msg" class="hidden text-sm font-semibold text-red-600" role="alert"></p>
+        <button class="btn-primary w-full" type="submit">تأكيد</button>
+        <button type="button" data-signout class="w-full text-sm font-semibold text-slate-500 underline">تسجيل الخروج</button>
+      </form>
+
+      <form id="step-enroll" class="mt-6 hidden space-y-4">
+        <p class="text-sm text-slate-600">فعّل المصادقة الثنائية: امسح الرمز بتطبيق مثل Google Authenticator أو Aegis، ثم أدخل الرمز الظاهر فيه.</p>
+        <img id="qr" alt="QR" class="mx-auto h-44 w-44 rounded-xl border border-brand-light p-2">
+        <p class="break-all text-center text-xs text-slate-500" dir="ltr" id="secret"></p>
+        <input id="enroll-code" inputmode="numeric" maxlength="6" dir="ltr" required class="fld text-center text-2xl tracking-[0.5em]">
+        <p id="enroll-msg" class="hidden text-sm font-semibold text-red-600" role="alert"></p>
+        <button class="btn-primary w-full" type="submit">تفعيل ودخول</button>
+        <button type="button" data-signout class="w-full text-sm font-semibold text-slate-500 underline">تسجيل الخروج</button>
+      </form>
+
+      <div id="step-denied" class="mt-6 hidden space-y-4">
+        <p class="rounded-xl bg-red-50 p-4 text-sm font-semibold text-red-700">هذا الحساب غير مخوّل للدخول إلى لوحة التحكم.</p>
+        <button type="button" data-signout class="btn-primary w-full">رجوع</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- DASHBOARD: sticky header with top tabs; only the active tab's content is shown -->
+  <div id="dash" class="hidden">
+    <header class="sticky top-0 z-30 border-b border-brand-light bg-white/95 backdrop-blur">
+      <div class="mx-auto max-w-5xl px-5">
+        <div class="flex flex-wrap items-center justify-between gap-3 py-3">
+          <div>
+            <p class="font-extrabold tracking-tight">Fikra Automation <span class="font-medium text-brand">· لوحة التحكم</span></p>
+            <p id="who" dir="ltr" class="text-start text-xs text-slate-500"></p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="refresh-btn" type="button" class="btn-ghost">تحديث</button>
+            <button type="button" data-signout class="btn-ghost">تسجيل الخروج</button>
+          </div>
+        </div>
+        <nav id="tabs" role="tablist" aria-label="أقسام لوحة التحكم" class="-mb-px flex gap-1 overflow-x-auto">
+          <button id="tab-services" role="tab" data-tab="services" aria-controls="list" class="tab-btn">الخدمات والعروض</button>
+          <button id="tab-certs" role="tab" data-tab="certs" aria-controls="list" class="tab-btn">الشواهد والشهادات</button>
+          <button id="tab-career" role="tab" data-tab="career" aria-controls="list" class="tab-btn">المسار والخبرات</button>
+          <button id="tab-faqs" role="tab" data-tab="faqs" aria-controls="list" class="tab-btn">الأسئلة الشائعة</button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-5xl px-5 py-8">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 id="tab-title" class="text-xl font-extrabold"></h1>
+          <p id="tab-sub" class="text-sm text-slate-500"></p>
+        </div>
+        <button id="add-btn" type="button" class="btn-primary"></button>
+      </div>
+      <p id="dash-msg" class="mt-4 hidden rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700" role="alert"></p>
+      <ul id="list" role="tabpanel" class="mt-6 grid gap-5"></ul>
+    </main>
+  </div>
+
+  <!-- ADD / EDIT FORM: closes with the backdrop, the X button, Cancel or Escape -->
+  <dialog id="dlg" class="dlg" aria-labelledby="f-title">
+    <form id="f" class="dlg-form" novalidate>
+      <header class="dlg-head">
+        <h2 id="f-title" class="min-w-0 text-lg font-extrabold"></h2>
+        <button type="button" data-close class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-mist text-xl leading-none transition hover:bg-brand-light active:scale-95" aria-label="إغلاق">&times;</button>
+      </header>
+      <div id="f-fields" class="dlg-body grid gap-4 sm:grid-cols-2"></div>
+      <footer class="dlg-foot">
+        <p id="f-msg" class="mb-3 hidden text-sm font-semibold text-red-600" role="alert"></p>
+        <div class="flex gap-3">
+          <button id="f-save" class="btn-primary flex-1" type="submit">حفظ</button>
+          <button type="button" data-close class="btn-ghost">إلغاء</button>
+        </div>
+      </footer>
+    </form>
+  </dialog>
+
+  <div id="toast" class="pointer-events-none fixed inset-x-4 bottom-5 z-[60] mx-auto w-fit max-w-[92vw] translate-y-4 rounded-xl bg-ink px-5 py-3 text-center text-sm font-bold text-white opacity-0 shadow-xl transition duration-300" role="status" aria-live="polite"></div>
+
+  <style type="text/tailwindcss">
+    @layer components {
+      .btn-primary { @apply inline-flex items-center justify-center rounded-xl bg-brand px-5 py-3 font-bold text-white transition hover:bg-brand-dark active:scale-[0.97] disabled:opacity-60; }
+      .btn-ghost   { @apply inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-bold text-brand-dark ring-1 ring-brand/30 transition hover:bg-white active:scale-[0.97] disabled:opacity-40; }
+      .btn-danger  { @apply inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-bold text-red-700 ring-1 ring-red-300 transition hover:bg-red-50 active:scale-[0.97]; }
+      .btn-danger.armed { @apply bg-red-600 text-white ring-red-600 hover:bg-red-700; }
+      .ibtn        { @apply inline-flex h-8 min-w-8 items-center justify-center rounded-lg px-2 text-xs font-bold text-brand-dark ring-1 ring-brand/25 transition hover:bg-brand-mist active:scale-95 disabled:opacity-35; }
+      .ibtn.danger { @apply text-red-700 ring-red-300 hover:bg-red-50; }
+      .ibtn.danger.armed { @apply bg-red-600 text-white ring-red-600 hover:bg-red-700; }
+      .fld         { @apply w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-base focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/20; }
+      .tab-btn     { @apply shrink-0 whitespace-nowrap border-b-[3px] border-transparent px-4 py-3 text-sm font-bold text-slate-500 transition-colors hover:text-brand-dark; }
+      .tab-btn[aria-selected="true"] { @apply border-brand text-brand; }
+    }
+  </style>
+  <style>
+    @keyframes dlgIn { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
+    @keyframes tabIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    #list.swap { animation: tabIn 260ms cubic-bezier(0.16, 1, 0.3, 1); }
+    /* Modal layout: fixed header + flexible scrolling body (min-height:0 is what lets it shrink) + fixed footer.
+       Never put a display utility (flex, grid) on the <dialog> itself: it would override display:none when closed. */
+    .dlg { width: min(96vw, 42rem); max-width: none; max-height: 92vh; max-height: 92dvh; margin: auto; padding: 0; border: 0; overflow: hidden; border-radius: 1.5rem; background: #fff; color: #0B2545; box-shadow: 0 25px 50px -12px rgba(11, 37, 69, 0.45); }
+    .dlg[open] { display: flex; flex-direction: column; animation: dlgIn 220ms cubic-bezier(0.16, 1, 0.3, 1); }
+    .dlg::backdrop { background: rgba(11, 37, 69, 0.6); backdrop-filter: blur(4px); }
+    .dlg-form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; max-height: inherit; }
+    .dlg-head { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 1rem 1.5rem; border-bottom: 1px solid #DBEAFE; background: #fff; }
+    .dlg-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; align-content: start; padding: 1.25rem 1.5rem; scroll-padding: 1rem; }
+    .dlg-foot { flex: 0 0 auto; padding: 1rem 1.5rem; padding-bottom: max(1rem, env(safe-area-inset-bottom)); border-top: 1px solid #DBEAFE; background: #fff; }
+    @media (max-width: 639px) {
+      .dlg-head, .dlg-body, .dlg-foot { padding-inline: 1rem; }
+      .dlg-body { padding-block: 1rem; }
+    }
+    html.lock { overflow: hidden; }
+    #tabs { scrollbar-width: none; }
+    #tabs::-webkit-scrollbar { display: none; }
+    a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid #93C5FD; outline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) { .dlg[open], #list.swap { animation: none; } }
+  </style>
+
+  <script>
+    /* ===== CONFIG ===== */
+    const CFG = {
+      url: 'https://iuwbkrucimuwmwvkzhrv.supabase.co',
+      anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1d2JrcnVjaW11d213dmt6aHJ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyNzY1ODgsImV4cCI6MjEwNjg1MjU4OH0.8eHW0UsEcu6M6NYY5Uff1Pz1p7ToEg56RTcrLD8NuvY',
+      bucket: 'service-media',
+      idleMs: 15 * 60 * 1000,          // automatic sign-out after 15 minutes without activity
+      maxFails: 5, lockMs: 30000,      // front-end brake on wrong passwords (Supabase also rate-limits)
+    };
+
+    // The session lives in sessionStorage: closing the tab signs you out.
+    const sb = window.supabase.createClient(CFG.url, CFG.anonKey, {
+      auth: { storage: window.sessionStorage, persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+    });
+
+    /* ===== DATA MODEL: edit field names here if your tables use other column names ===== */
+    const ICON_KEYS = ['workflow', 'scripts', 'sheets', 'ai', 'data', 'audit', 'loyalty'];
+    const CAREER_ICONS = {
+      briefcase: ['&#128188;', 'عمل / تجربة مهنية'], graduation: ['&#127891;', 'دراسة / شهادة جامعية'], rocket: ['&#128640;', 'مشروع ناشئ'],
+      award: ['&#127941;', 'شهادة / إنجاز'], code: ['&#128187;', 'مشروع تقني'], star: ['&#11088;', 'محطة مميزة'],
+    };
+    const MEDIA = {
+      image: { types: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], max: 5 * 1024 * 1024, label: '5 ميغابايت', accept: 'image/jpeg,image/png,image/webp,image/gif' },
+      video: { types: ['video/mp4', 'video/webm'], max: 50 * 1024 * 1024, label: '50 ميغابايت', accept: 'video/mp4,video/webm' },
+      doc:   { types: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'], max: 10 * 1024 * 1024, label: '10 ميغابايت (صورة أو PDF)', accept: 'image/jpeg,image/png,image/webp,application/pdf' },
+    };
+    const EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'video/mp4': 'mp4', 'video/webm': 'webm', 'application/pdf': 'pdf' };
+
+    // One entry per list the dashboard manages. `tab` entries drive the top navigation.
+    const ENT = {
+      services: {
+        table: 'services_type', newTitle: 'خدمة جديدة', editTitle: 'تعديل الخدمة',
+        fields: [
+          { k: 'title_fr', l: 'العنوان (فرنسي)', t: 'text', req: 1, ltr: 1 },
+          { k: 'title_ar', l: 'العنوان (عربي)', t: 'text', req: 1, rtl: 1 },
+          { k: 'description_fr', l: 'الوصف (فرنسي)', t: 'area', ltr: 1, wide: 1 },
+          { k: 'description_ar', l: 'الوصف (عربي)', t: 'area', rtl: 1, wide: 1 },
+          { k: 'icon', l: 'الأيقونة', t: 'select', opts: () => ICON_KEYS.map((k) => [k, k]) },
+          { k: 'sort_order', l: 'الترتيب', t: 'number', def: () => nextOrder(state.services) },
+          { k: 'image_url', l: 'صورة الخدمة', t: 'media', kind: 'image', wide: 1 },
+          { k: 'video_url', l: 'فيديو توضيحي (رابط YouTube أو ملف mp4 / webm)', t: 'media', kind: 'video', wide: 1 },
+          { k: 'is_active', l: 'ظاهرة للزوار', t: 'check', def: true },
+        ],
+      },
+      offers: {
+        table: 'service_offers', newTitle: 'عرض جديد', editTitle: 'تعديل العرض',
+        fields: [
+          { k: 'name_ar', l: 'اسم العرض (عربي)', t: 'text', req: 1, rtl: 1 },
+          { k: 'name_fr', l: 'اسم العرض (فرنسي)', t: 'text', req: 1, ltr: 1 },
+          { k: 'note_ar', l: 'وصف مختصر (عربي)', t: 'text', rtl: 1 },
+          { k: 'note_fr', l: 'وصف مختصر (فرنسي)', t: 'text', ltr: 1 },
+          { k: 'features_ar', l: 'المميزات (عربي): ميزة في كل سطر', t: 'area', rtl: 1 },
+          { k: 'features_fr', l: 'المميزات (فرنسي): ميزة في كل سطر', t: 'area', ltr: 1 },
+          { k: 'price', l: 'السعر (فارغ = حسب الطلب)', t: 'number' },
+          { k: 'currency', l: 'العملة', t: 'text', def: 'MAD', ltr: 1 },
+          { k: 'sort_order', l: 'الترتيب', t: 'number', def: (ctx) => nextOrder(offersOf(ctx.service_id)) },
+          { k: 'is_active', l: 'ظاهر للزوار', t: 'check', def: true },
+        ],
+      },
+      certs: {
+        table: 'site_certificates', newTitle: 'شهادة جديدة', editTitle: 'تعديل الشهادة',
+        fields: [
+          { k: 'title_ar', l: 'عنوان الشهادة (عربي)', t: 'text', req: 1, rtl: 1 },
+          { k: 'title_fr', l: 'عنوان الشهادة (فرنسي)', t: 'text', req: 1, ltr: 1 },
+          { k: 'issuer', l: 'الجهة المانحة (مثال: HubSpot, Google, Coursera)', t: 'text', ltr: 1 },
+          { k: 'year', l: 'السنة / التاريخ', t: 'text', ltr: 1 },
+          { k: 'credential_url', l: 'رابط التحقق من الشهادة (اختياري)', t: 'text', ltr: 1, url: 1, wide: 1 },
+          { k: 'file_url', l: 'صورة الشهادة أو ملف PDF', t: 'media', kind: 'doc', wide: 1 },
+          { k: 'sort_order', l: 'الترتيب', t: 'number', def: () => nextOrder(state.certs) },
+          { k: 'is_active', l: 'ظاهرة للزوار', t: 'check', def: true },
+        ],
+      },
+      career: {
+        table: 'site_career', newTitle: 'محطة جديدة في المسار', editTitle: 'تعديل المحطة',
+        fields: [
+          { k: 'title_ar', l: 'العنوان (عربي)', t: 'text', req: 1, rtl: 1 },
+          { k: 'title_fr', l: 'العنوان (فرنسي)', t: 'text', req: 1, ltr: 1 },
+          { k: 'period_ar', l: 'الفترة (عربي) مثال: 2025 حتى الآن', t: 'text', rtl: 1 },
+          { k: 'period_fr', l: 'الفترة (فرنسي) مثال: 2025 à aujourd\'hui', t: 'text', ltr: 1 },
+          { k: 'text_ar', l: 'الوصف (عربي)', t: 'area', rtl: 1, wide: 1 },
+          { k: 'text_fr', l: 'الوصف (فرنسي)', t: 'area', ltr: 1, wide: 1 },
+          { k: 'icon', l: 'الأيقونة / الشارة', t: 'select', opts: () => Object.entries(CAREER_ICONS).map(([k, v]) => [k, v[1]]) },
+          { k: 'sort_order', l: 'الترتيب', t: 'number', def: () => nextOrder(state.career) },
+          { k: 'is_active', l: 'ظاهرة للزوار', t: 'check', def: true },
+        ],
+      },
+      faqs: {
+        table: 'service_faqs', newTitle: 'سؤال جديد', editTitle: 'تعديل السؤال',
+        fields: [
+          { k: 'question_ar', l: 'السؤال (عربي)', t: 'text', rtl: 1, wide: 1 },
+          { k: 'answer_ar', l: 'الجواب (عربي)', t: 'area', rtl: 1, wide: 1 },
+          { k: 'question_fr', l: 'السؤال (فرنسي)', t: 'text', req: 1, ltr: 1, wide: 1 },
+          { k: 'answer_fr', l: 'الجواب (فرنسي)', t: 'area', req: 1, ltr: 1, wide: 1 },
+          { k: 'sort_order', l: 'الترتيب', t: 'number', def: () => nextOrder(state.faqs) },
+          { k: 'is_active', l: 'ظاهر للزوار', t: 'check', def: true },
+        ],
+      },
+    };
+
+    // Top navigation tabs (url hash slug, titles, add-button label, tables loaded when the tab opens)
+    const TABS = {
+      services: { slug: 'services', title: 'الخدمات والعروض', sub: 'أدر خدماتك وصورها وفيديوهاتها وعروضها وأسعارها.', add: '+ إضافة خدمة', load: ['services', 'offers'] },
+      certs:    { slug: 'certificates', title: 'الشواهد والشهادات', sub: 'الشهادات والشارات التي تعرضها في قسم الشهادات بالموقع.', add: '+ إضافة شهادة', load: ['certs'] },
+      career:   { slug: 'career', title: 'المسار والخبرات', sub: 'محطات مسارك الدراسي والمهني ومشاريعك.', add: '+ إضافة محطة', load: ['career'] },
+      faqs:     { slug: 'faqs', title: 'الأسئلة الشائعة', sub: 'الأسئلة التي تظهر للزوار وتُستعمل في ترميز FAQPage لمحركات البحث.', add: '+ إضافة سؤال', load: ['faqs'] },
+    };
+    const TAB_KEYS = Object.keys(TABS);
+
+    /* ===== HELPERS ===== */
+    const $ = (s) => document.querySelector(s);
+    const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const show = (el, on) => el.classList.toggle('hidden', !on);
+    const say = (el, msg) => { el.textContent = msg || ''; show(el, !!msg); };
+    const state = {
+      tab: 'services', services: [], offers: [], certs: [], career: [], faqs: [], loaded: {}, open: new Set(), loading: false,
+      editing: null, factorId: null, fails: 0, lockUntil: 0, idle: 0, uploading: false,
+    };
+
+    const sortRows = (rows) => rows.slice().sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
+    const offersOf = (sid) => state.offers.filter((o) => String(o.service_id) === String(sid));
+    const nextOrder = (rows) => rows.reduce((m, r) => Math.max(m, Number(r.sort_order) || 0), 0) + 10;
+    const svcTitle = (s) => s.title_ar || s.title_fr || s.title || s.name || String(s.id);
+    const priceLabel = (o) => (o.price === null || o.price === undefined || o.price === '') ? 'حسب الطلب' : Number(o.price).toLocaleString('en-US') + ' ' + (o.currency || 'MAD');
+    const safeSrc = (u) => { const v = String(u || '').trim(); return /^(https?:\/\/|\/|[\w.-]+\/)/i.test(v) && !/^\s*(javascript|data|vbscript):/i.test(v) ? v : ''; };
+    const isYoutube = (u) => /(?:youtube\.com|youtu\.be)\//i.test(String(u || ''));
+    const isPdf = (u) => /\.pdf(\?|#|$)/i.test(String(u || ''));
+    const dbHint = (m) => {
+      m = m || '';
+      if (/could not find the table|relation .* does not exist|schema cache.*table/i.test(m)) return m + ' — الجدول غير موجود: أنشئه بأوامر SQL (الخطوة 5) أعلى ملف admin.html.';
+      if (/column|schema cache|does not exist/i.test(m)) return m + ' — شغّل أوامر SQL الموجودة أعلى ملف admin.html لإضافة الأعمدة الناقصة.';
+      return m;
+    };
+
+    let toastTimer = 0;
+    function toast(msg) {
+      const t = $('#toast'); t.textContent = msg;
+      t.classList.remove('opacity-0', 'translate-y-4'); clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.add('opacity-0', 'translate-y-4'), 2600);
+    }
+
+    /* ===== DIALOG: backdrop click, X, Cancel, Escape all close it; state is always reset ===== */
+    const dlg = $('#dlg');
+    let downOnBackdrop = false;
+    dlg.addEventListener('pointerdown', (e) => { downOnBackdrop = e.target === dlg; });
+    dlg.addEventListener('click', (e) => {
+      if ((e.target === dlg && downOnBackdrop) || e.target.closest('[data-close]')) dlg.close();
+    });
+    dlg.addEventListener('close', () => {
+      document.documentElement.classList.remove('lock');
+      state.editing = null; state.uploading = false;
+      $('#f-save').disabled = false;
+      say($('#f-msg'), '');
+      $('#f-fields').innerHTML = '';
+    });   // Escape closes natively and also ends here
+
+    /* ===== ACCESS FLOW: password -> 2FA (aal2) -> server-side is_admin() check ===== */
+    function showStep(name) {
+      if (name && dlg.open) dlg.close();
+      show($('#gate'), !!name); show($('#dash'), !name);
+      ['login', 'mfa', 'enroll', 'denied'].forEach((s) => show($('#step-' + s), s === name));
+      document.body.dataset.step = name || 'dash';
+    }
+
+    async function route() {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) { stopIdle(); return showStep('login'); }
+      const { data: aal } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aal && aal.currentLevel === 'aal2') return enterDashboard(session);
+      const { data: f } = await sb.auth.mfa.listFactors();
+      const totp = ((f && f.totp) || []).find((x) => x.status === 'verified');
+      if (totp) { state.factorId = totp.id; $('#mfa-code').value = ''; showStep('mfa'); $('#mfa-code').focus(); return; }
+      return startEnroll();
+    }
+
+    async function startEnroll() {
+      const { data: f } = await sb.auth.mfa.listFactors();
+      for (const x of ((f && f.all) || [])) if (x.status === 'unverified') await sb.auth.mfa.unenroll({ factorId: x.id });
+      const { data, error } = await sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Fikra admin ' + Date.now() });
+      if (error) { showStep('login'); say($('#login-msg'), 'تعذّر تفعيل المصادقة الثنائية: ' + error.message); return; }
+      state.factorId = data.id;
+      $('#qr').src = data.totp.qr_code;
+      $('#secret').textContent = data.totp.secret;
+      $('#enroll-code').value = '';
+      showStep('enroll');
+    }
+
+    async function verifyCode(code, msgEl) {
+      say(msgEl, '');
+      const { error } = await sb.auth.mfa.challengeAndVerify({ factorId: state.factorId, code: code.replace(/\s/g, '') });
+      if (error) { say(msgEl, 'الرمز غير صحيح أو منتهي.'); return; }
+      route();
+    }
+
+    $('#step-login').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msg = $('#login-msg');
+      if (Date.now() < state.lockUntil) { say(msg, 'محاولات كثيرة. انتظر قليلاً ثم أعد المحاولة.'); return; }
+      const btn = $('#login-btn'); btn.disabled = true;
+      const { error } = await sb.auth.signInWithPassword({ email: $('#email').value.trim(), password: $('#password').value });
+      btn.disabled = false;
+      if (error) {
+        if (++state.fails >= CFG.maxFails) { state.lockUntil = Date.now() + CFG.lockMs; state.fails = 0; }
+        say(msg, 'بيانات الدخول غير صحيحة.');
+        return;
+      }
+      state.fails = 0; $('#password').value = ''; say(msg, '');
+      route();
+    });
+    $('#step-mfa').addEventListener('submit', (e) => { e.preventDefault(); verifyCode($('#mfa-code').value, $('#mfa-msg')); });
+    $('#step-enroll').addEventListener('submit', (e) => { e.preventDefault(); verifyCode($('#enroll-code').value, $('#enroll-msg')); });
+
+    async function signOut() {
+      stopIdle();
+      await sb.auth.signOut();
+      Object.assign(state, { services: [], offers: [], certs: [], career: [], faqs: [], loaded: {} });
+      state.open.clear();
+      $('#list').innerHTML = '';
+      showStep('login');
+    }
+    document.addEventListener('click', (e) => { if (e.target.closest('[data-signout]')) signOut(); });
+
+    async function enterDashboard(session) {
+      const { data: ok, error } = await sb.rpc('is_admin');
+      if (error || ok !== true) { await sb.auth.signOut(); showStep('denied'); return; }
+      $('#who').textContent = session.user.email;
+      showStep(null);
+      startIdle();
+      applyTab();
+    }
+
+    /* ===== IDLE SIGN-OUT ===== */
+    const IDLE_EVENTS = ['click', 'keydown', 'pointermove', 'touchstart'];
+    const bump = () => { clearTimeout(state.idle); state.idle = setTimeout(signOut, CFG.idleMs); };
+    function startIdle() { IDLE_EVENTS.forEach((ev) => document.addEventListener(ev, bump, { passive: true })); bump(); }
+    function stopIdle() { clearTimeout(state.idle); IDLE_EVENTS.forEach((ev) => document.removeEventListener(ev, bump)); }
+
+    /* ===== TABS: the url hash keeps the active tab (reload / back button friendly) ===== */
+    const tabFromHash = () => {
+      const h = location.hash.replace(/^#\/?/, '');
+      return TAB_KEYS.find((k) => TABS[k].slug === h) || 'services';
+    };
+
+    function applyTab() {
+      if (document.body.dataset.step !== 'dash') return;
+      const key = tabFromHash(), meta = TABS[key];
+      state.tab = key;
+      TAB_KEYS.forEach((k) => {
+        const b = $('#tab-' + k), on = k === key;
+        b.setAttribute('aria-selected', String(on));
+        b.tabIndex = on ? 0 : -1;
+      });
+      $('#list').setAttribute('aria-labelledby', 'tab-' + key);
+      $('#tab-title').textContent = meta.title;
+      $('#tab-sub').textContent = meta.sub;
+      $('#add-btn').textContent = meta.add;
+      say($('#dash-msg'), '');
+      if (state.loaded[key]) { render(); swapAnim(); } else loadTab(key);
+    }
+
+    function swapAnim() { const l = $('#list'); l.classList.remove('swap'); void l.offsetWidth; l.classList.add('swap'); }
+
+    function goTab(key) {
+      const slug = TABS[key].slug;
+      if (location.hash === '#' + slug) applyTab(); else location.hash = slug;   // hashchange calls applyTab()
+    }
+    window.addEventListener('hashchange', applyTab);
+    $('#tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (b) goTab(b.dataset.tab); });
+    $('#tabs').addEventListener('keydown', (e) => {   // arrow keys move between tabs (direction aware for RTL)
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+      const rtl = getComputedStyle(document.documentElement).direction === 'rtl';
+      let i = TAB_KEYS.indexOf(state.tab);
+      if (e.key === 'Home') i = 0; else if (e.key === 'End') i = TAB_KEYS.length - 1;
+      else i = (i + ((e.key === 'ArrowRight') === rtl ? -1 : 1) + TAB_KEYS.length) % TAB_KEYS.length;
+      e.preventDefault(); goTab(TAB_KEYS[i]); $('#tab-' + TAB_KEYS[i]).focus();
+    });
+    $('#add-btn').addEventListener('click', () => openForm(state.tab, null, {}));
+    $('#refresh-btn').addEventListener('click', () => loadTab(state.tab));
+
+    /* ===== DATA ===== */
+    async function loadTab(key) {
+      say($('#dash-msg'), '');
+      state.loading = true; render();
+      const names = TABS[key].load;
+      const results = await Promise.all(names.map((n) => sb.from(ENT[n].table).select('*')));
+      results.forEach((r, i) => {
+        if (r.error) say($('#dash-msg'), dbHint(r.error.message));
+        state[names[i]] = sortRows(r.data || []);
+      });
+      state.loading = false;
+      state.loaded[key] = !results.some((r) => r.error);
+      if (state.tab === key) { render(); swapAnim(); }
+    }
+
+    /* ===== RENDER ===== */
+    const statusBadge = (active, f1 = 'ظاهر', f0 = 'مخفي') => `<span class="rounded-full px-2.5 py-0.5 text-[11px] font-bold ${active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}">${active ? f1 : f0}</span>`;
+    const tile = (inner) => `<div class="grid h-20 w-28 shrink-0 place-items-center overflow-hidden rounded-xl bg-brand-light text-3xl sm:h-24 sm:w-36" aria-hidden="true">${inner}</div>`;
+
+    function serviceThumb(s) {
+      const img = safeSrc(s.image_url);
+      return tile(img ? `<img src="${esc(img)}" alt="" loading="lazy" class="h-full w-full object-cover" onerror="this.remove()">`
+        : (s.video_url ? '&#127916;' : '<span class="text-brand/40">&#9889;</span>'));
+    }
+
+    function chips(text, dir) {
+      const items = String(text || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+      if (!items.length) return '';
+      const more = items.length > 3 ? `<span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">+${items.length - 3}</span>` : '';
+      return `<p dir="${dir}" class="flex flex-wrap gap-1">${items.slice(0, 3).map((x) => `<span class="rounded-full bg-brand-mist px-2.5 py-0.5 text-[11px] font-semibold text-slate-700 ring-1 ring-brand-light">${esc(x)}</span>`).join('')}${more}</p>`;
+    }
+
+    const orderBtns = (ent, id, i, arr) => `
+      <button class="ibtn" data-act="up" data-ent="${ent}" data-id="${esc(id)}" aria-label="رفع" ${i === 0 ? 'disabled' : ''}>&uarr;</button>
+      <button class="ibtn" data-act="down" data-ent="${ent}" data-id="${esc(id)}" aria-label="خفض" ${i === arr.length - 1 ? 'disabled' : ''}>&darr;</button>`;
+
+    function offerRow(o, i, arr) {
+      const active = o.is_active !== false;
+      return `<li class="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-brand-light bg-white px-3.5 py-2.5 ${active ? '' : 'opacity-60'}">
+        <div class="min-w-[9rem]">
+          <p class="font-bold leading-tight">${esc(o.name_ar || o.name_fr || '—')}</p>
+          <p class="text-xs text-slate-500" dir="ltr">${esc(o.name_fr || '')}</p>
+        </div>
+        <span class="rounded-lg bg-brand-light px-3 py-1 text-sm font-extrabold text-brand-dark" dir="auto">${esc(priceLabel(o))}</span>
+        <div class="min-w-0 flex-1 basis-56 space-y-1">${chips(o.features_ar, 'rtl')}${chips(o.features_fr, 'ltr')}</div>
+        <div class="ms-auto flex flex-wrap items-center gap-1.5">
+          ${active ? '' : statusBadge(false)}
+          ${orderBtns('offers', o.id, i, arr)}
+          <button class="ibtn" data-act="edit" data-ent="offers" data-id="${esc(o.id)}">تعديل</button>
+          <button class="ibtn" data-act="toggle" data-ent="offers" data-id="${esc(o.id)}">${active ? 'إخفاء' : 'إظهار'}</button>
+          <button class="ibtn danger" data-act="delete" data-ent="offers" data-id="${esc(o.id)}">حذف</button>
+        </div>
+      </li>`;
+    }
+
+    function offersPanel(s) {
+      const offers = offersOf(s.id);
+      return `<div class="border-t border-brand-light bg-brand-mist/70 px-4 py-4 sm:px-5">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <p class="text-sm font-extrabold">عروض «${esc(svcTitle(s))}»</p>
+          <button class="btn-primary !px-4 !py-2 text-sm" data-act="add-offer" data-sid="${esc(s.id)}">+ إضافة عرض</button>
+        </div>
+        ${offers.length
+          ? `<ul class="mt-3 grid gap-2">${offers.map(offerRow).join('')}</ul>`
+          : '<p class="mt-3 rounded-xl border border-dashed border-brand/30 bg-white p-4 text-center text-sm text-slate-500">لا توجد عروض بعد. يرى الزوار خيار «حسب الطلب» إلى أن تضيف عرضاً.</p>'}
+      </div>`;
+    }
+
+    function serviceCard(s, i, arr) {
+      const active = s.is_active !== false;
+      const open = state.open.has(String(s.id));
+      const n = offersOf(s.id).length;
+      return `<li><article class="overflow-hidden rounded-2xl border border-brand-light bg-white shadow-sm ${active ? '' : 'opacity-70'}">
+        <div class="flex gap-4 p-4 sm:p-5">
+          ${serviceThumb(s)}
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <p class="text-lg font-extrabold leading-tight">${esc(svcTitle(s))}</p>
+              ${statusBadge(active, 'ظاهرة', 'مخفية')}
+              ${s.icon ? `<span class="rounded-full bg-brand-mist px-2.5 py-0.5 text-[11px] font-bold text-slate-600" dir="ltr">${esc(s.icon)}</span>` : ''}
+              ${s.video_url ? '<span class="rounded-full bg-brand-mist px-2.5 py-0.5 text-[11px] font-bold text-slate-600">فيديو</span>' : ''}
+            </div>
+            <p class="text-sm text-slate-500" dir="ltr">${esc(s.title_fr || '')}</p>
+            <p class="mt-1 line-clamp-2 text-sm text-slate-600" dir="auto">${esc(s.description_ar || s.description_fr || '')}</p>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 border-t border-brand-light px-4 py-3 sm:px-5">
+          ${orderBtns('services', s.id, i, arr)}
+          <button class="btn-ghost !py-1.5" data-act="edit" data-ent="services" data-id="${esc(s.id)}">تعديل</button>
+          <button class="btn-ghost !py-1.5" data-act="toggle" data-ent="services" data-id="${esc(s.id)}">${active ? 'إخفاء' : 'إظهار'}</button>
+          <button class="btn-danger !py-1.5" data-act="delete" data-ent="services" data-id="${esc(s.id)}">حذف</button>
+          <button class="btn-primary ms-auto !px-4 !py-2 text-sm" data-act="offers" data-id="${esc(s.id)}" aria-expanded="${open}">العروض (${n}) ${open ? '&#9652;' : '&#9662;'}</button>
+        </div>
+        ${open ? offersPanel(s) : ''}
+      </article></li>`;
+    }
+
+    // Flat lists (certificates, career pathway, FAQs): each entity says how to describe a row
+    const VIEW = {
+      certs: (r) => {
+        const file = safeSrc(r.file_url), link = safeSrc(r.credential_url);
+        return {
+          thumb: tile(file && !isPdf(file) ? `<img src="${esc(file)}" alt="" loading="lazy" class="h-full w-full object-cover" onerror="this.remove()">` : (file ? '&#128196;' : '&#127941;')),
+          title: r.title_ar || r.title_fr || '—',
+          sub: [r.title_fr, [r.issuer, r.year].filter(Boolean).join(' · ')].filter(Boolean).join(' — '),
+          body: '',
+          extra: [file ? `<a href="${esc(file)}" target="_blank" rel="noopener noreferrer" class="text-xs font-bold text-brand underline">فتح الملف</a>` : '',
+                  link ? `<a href="${esc(link)}" target="_blank" rel="noopener noreferrer" class="text-xs font-bold text-brand underline">رابط التحقق</a>` : ''].filter(Boolean).join(' &nbsp; '),
+        };
+      },
+      career: (r) => ({
+        thumb: tile((CAREER_ICONS[r.icon] || CAREER_ICONS.star)[0]),
+        title: r.title_ar || r.title_fr || '—',
+        sub: [r.period_ar, r.title_fr, r.period_fr].filter(Boolean).join(' | '),
+        body: r.text_ar || r.text_fr || '',
+        extra: '',
+      }),
+      faqs: (r) => ({
+        thumb: tile('<span class="text-brand/60">?</span>'),
+        title: r.question_ar || r.question_fr || '—',
+        sub: r.question_ar ? (r.question_fr || '') : '',
+        body: r.answer_ar || r.answer_fr || '',
+        extra: '',
+      }),
+    };
+
+    function flatCard(ent, r, i, arr) {
+      const active = r.is_active !== false, v = VIEW[ent](r);
+      return `<li class="rounded-2xl border border-brand-light bg-white p-4 shadow-sm sm:p-5 ${active ? '' : 'opacity-70'}">
+        <div class="flex gap-4">
+          ${v.thumb}
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <p class="text-lg font-extrabold leading-tight">${esc(v.title)}</p>${statusBadge(active)}
+            </div>
+            ${v.sub ? `<p class="text-sm text-slate-500" dir="auto">${esc(v.sub)}</p>` : ''}
+            ${v.body ? `<p class="mt-1 line-clamp-2 text-sm text-slate-600" dir="auto">${esc(v.body)}</p>` : ''}
+            ${v.extra ? `<p class="mt-2">${v.extra}</p>` : ''}
+          </div>
+        </div>
+        <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-brand-light pt-3">
+          ${orderBtns(ent, r.id, i, arr)}
+          <button class="btn-ghost !py-1.5" data-act="edit" data-ent="${ent}" data-id="${esc(r.id)}">تعديل</button>
+          <button class="btn-ghost !py-1.5" data-act="toggle" data-ent="${ent}" data-id="${esc(r.id)}">${active ? 'إخفاء' : 'إظهار'}</button>
+          <button class="btn-danger !py-1.5" data-act="delete" data-ent="${ent}" data-id="${esc(r.id)}">حذف</button>
+        </div>
+      </li>`;
+    }
+
+    const EMPTY = {
+      services: 'لا توجد خدمات بعد. أضف أول خدمة.',
+      certs: 'لا توجد شهادات بعد. أضف أول شهادة.',
+      career: 'لا توجد محطات بعد. أضف أول محطة في مسارك.',
+      faqs: 'لا توجد أسئلة بعد. أضف أول سؤال.',
+    };
+
+    function render() {
+      const key = state.tab, rows = state[key];
+      const empty = `<li class="rounded-2xl border border-dashed border-brand/30 bg-white p-8 text-center text-slate-500">${EMPTY[key]}</li>`;
+      $('#list').innerHTML = state.loading && !state.loaded[key]
+        ? '<li class="rounded-2xl bg-white p-8 text-center text-slate-500">جارٍ التحميل…</li>'
+        : (rows.length ? rows.map((r, i, arr) => key === 'services' ? serviceCard(r, i, arr) : flatCard(key, r, i, arr)).join('') : empty);
+    }
+
+    /* ===== ACTIONS ===== */
+    const listFor = (ent, row) => ent === 'offers' ? offersOf(row.service_id) : state[ent];
+    const findRow = (ent, id) => state[ent].find((r) => String(r.id) === String(id));
+
+    async function move(ent, row, dir) {
+      const list = listFor(ent, row);
+      const i = list.findIndex((r) => String(r.id) === String(row.id)), j = i + dir;
+      if (i < 0 || j < 0 || j >= list.length) return;
+      const arr = list.slice(); [arr[i], arr[j]] = [arr[j], arr[i]];
+      const jobs = [];
+      arr.forEach((r, idx) => { const want = (idx + 1) * 10; if (Number(r.sort_order) !== want) jobs.push(sb.from(ENT[ent].table).update({ sort_order: want }).eq('id', r.id)); });
+      const res = await Promise.all(jobs);
+      const bad = res.find((x) => x.error);
+      if (bad) { say($('#dash-msg'), dbHint(bad.error.message)); return; }
+      toast('تم تغيير الترتيب'); await loadTab(state.tab);
+    }
+
+    $('#list').addEventListener('click', async (e) => {
+      const btn = e.target.closest('[data-act]'); if (!btn) return;
+      const act = btn.dataset.act, ent = btn.dataset.ent;
+      if (act === 'offers') { const k = btn.dataset.id; state.open.has(k) ? state.open.delete(k) : state.open.add(k); render(); return; }
+      if (act === 'add-offer') { state.open.add(String(btn.dataset.sid)); openForm('offers', null, { service_id: String(btn.dataset.sid) }); return; }
+      const row = findRow(ent, btn.dataset.id); if (!row) return;
+      if (act === 'edit') return openForm(ent, row, ent === 'offers' ? { service_id: String(row.service_id) } : {});
+      if (act === 'up' || act === 'down') { btn.disabled = true; return move(ent, row, act === 'up' ? -1 : 1); }
+
+      if (act === 'delete' && btn.dataset.armed !== '1') {      // first click arms, second click (within 3 s) deletes
+        btn.dataset.armed = '1'; const old = btn.textContent; btn.textContent = 'تأكيد الحذف'; btn.classList.add('armed');
+        setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = ''; btn.textContent = old; btn.classList.remove('armed'); } }, 3000);
+        return;
+      }
+      btn.disabled = true;
+      let error;
+      if (act === 'toggle') ({ error } = await sb.from(ENT[ent].table).update({ is_active: row.is_active === false }).eq('id', row.id));
+      else if (act === 'delete') {
+        if (ent === 'services') await sb.from(ENT.offers.table).delete().eq('service_id', String(row.id));
+        ({ error } = await sb.from(ENT[ent].table).delete().eq('id', row.id));
+      }
+      if (error) { btn.disabled = false; say($('#dash-msg'), dbHint(error.message)); return; }
+      toast(act === 'delete' ? 'تم الحذف' : 'تم تغيير الظهور'); loadTab(state.tab);
+    });
+
+    /* ===== ADD / EDIT FORM (generated from the field lists above) ===== */
+    function mediaPreview(kind, url) {
+      const src = safeSrc(url);
+      if (!src) return '';
+      if (kind === 'video') {
+        return isYoutube(src) ? '<p class="text-xs font-semibold text-slate-500">رابط YouTube: سيُعرض داخل الموقع.</p>'
+          : `<video src="${esc(src)}" controls preload="metadata" class="h-32 max-w-full rounded-lg bg-ink"></video>`;
+      }
+      if (kind === 'doc' && isPdf(src)) return `<a href="${esc(src)}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-lg bg-brand-mist px-3 py-2 text-sm font-bold text-brand underline">&#128196; فتح ملف PDF</a>`;
+      return `<img src="${esc(src)}" alt="" class="h-28 max-w-full rounded-lg object-cover ring-1 ring-brand-light" onerror="this.replaceWith(document.createTextNode('تعذّر عرض الصورة'))">`;
+    }
+
+    function fieldHtml(f, row, ctx) {
+      const v = row ? row[f.k] : (typeof f.def === 'function' ? f.def(ctx) : f.def);
+      const dir = f.rtl ? 'rtl' : f.ltr ? 'ltr' : 'auto';
+      const cls = f.wide ? 'sm:col-span-2' : '';
+      const label = `${esc(f.l)}${f.req ? ' <span class="text-brand">*</span>' : ''}`;
+      if (f.t === 'check') return `<label class="flex items-center gap-2.5 text-sm font-bold ${cls}"><input type="checkbox" name="${f.k}" class="h-5 w-5 accent-blue-700" ${v !== false && v !== null && v !== undefined ? 'checked' : ''}> ${label}</label>`;
+      if (f.t === 'media') {
+        const m = MEDIA[f.kind];
+        return `<div class="${cls}" data-media="${f.k}" data-kind="${f.kind}">
+          <p class="text-sm font-bold">${label}</p>
+          <div class="mt-1.5 flex flex-wrap gap-2">
+            <input name="${f.k}" type="text" dir="ltr" value="${esc(v ?? '')}" placeholder="https://… أو ارفع ملفاً" class="fld min-w-0 flex-1 basis-56">
+            <label class="btn-ghost cursor-pointer"><input type="file" accept="${m.accept}" class="sr-only" data-upload="${f.k}" data-kind="${f.kind}">رفع ملف</label>
+            <button type="button" class="btn-ghost" data-clear="${f.k}">مسح</button>
+          </div>
+          <p class="mt-1 text-xs text-slate-500" data-upmsg>الحد الأقصى ${m.label}.</p>
+          <div class="mt-2" data-preview>${mediaPreview(f.kind, v)}</div>
+        </div>`;
+      }
+      let input;
+      if (f.t === 'area') input = `<textarea name="${f.k}" rows="3" dir="${dir}" class="fld mt-1.5 resize-y">${esc(v ?? '')}</textarea>`;
+      else if (f.t === 'select') input = `<select name="${f.k}" class="fld mt-1.5"><option value="">—</option>${f.opts().map(([val, txt]) => `<option value="${esc(val)}" ${String(v ?? '') === String(val) ? 'selected' : ''}>${esc(txt)}</option>`).join('')}</select>`;
+      else input = `<input name="${f.k}" type="${f.t === 'number' ? 'number' : 'text'}" ${f.t === 'number' ? 'step="any" inputmode="decimal"' : ''} dir="${dir}" value="${esc(v ?? '')}" class="fld mt-1.5">`;
+      return `<label class="block text-sm font-bold ${cls}">${label}${input}</label>`;
+    }
+
+    function openForm(ent, row, ctx) {
+      const def = ENT[ent];
+      state.editing = { ent, row, ctx };
+      let title = row ? def.editTitle : def.newTitle;
+      if (ent === 'offers') { const s = findRow('services', ctx.service_id); if (s) title += ' — ' + svcTitle(s); }
+      $('#f-title').textContent = title;
+      $('#f-fields').innerHTML = def.fields.map((f) => fieldHtml(f, row, ctx)).join('');
+      say($('#f-msg'), '');
+      $('#f-save').disabled = false;
+      document.documentElement.classList.add('lock');
+      dlg.showModal();
+      $('#f-fields').scrollTop = 0;
+    }
+
+    // Live preview when a URL is typed or pasted
+    $('#f-fields').addEventListener('input', (e) => {
+      const box = e.target.closest('[data-media]');
+      if (box && e.target.matches('input[type="text"]')) box.querySelector('[data-preview]').innerHTML = mediaPreview(box.dataset.kind, e.target.value);
+    });
+    $('#f-fields').addEventListener('click', (e) => {
+      const clr = e.target.closest('[data-clear]'); if (!clr) return;
+      const box = clr.closest('[data-media]');
+      box.querySelector('input[type="text"]').value = '';
+      box.querySelector('[data-preview]').innerHTML = '';
+    });
+
+    async function uploadFile(file, kind) {
+      const rule = MEDIA[kind];
+      if (!rule.types.includes(file.type)) throw new Error('نوع الملف غير مسموح.');
+      if (file.size > rule.max) throw new Error('الملف أكبر من ' + rule.label + '.');
+      const path = kind + 's/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + EXT[file.type];
+      const { error } = await sb.storage.from(CFG.bucket).upload(path, file, { contentType: file.type, cacheControl: '31536000', upsert: false });
+      if (error) throw error;
+      return sb.storage.from(CFG.bucket).getPublicUrl(path).data.publicUrl;
+    }
+
+    $('#f-fields').addEventListener('change', async (e) => {
+      const input = e.target.closest('input[type="file"]'); if (!input || !input.files[0]) return;
+      const box = input.closest('[data-media]'), msg = box.querySelector('[data-upmsg]');
+      const file = input.files[0]; input.value = '';
+      state.uploading = true; $('#f-save').disabled = true;
+      msg.className = 'mt-1 text-xs font-semibold text-brand'; msg.textContent = 'جارٍ الرفع…';
+      try {
+        const url = await uploadFile(file, box.dataset.kind);
+        if (!dlg.open) return;
+        box.querySelector('input[type="text"]').value = url;
+        box.querySelector('[data-preview]').innerHTML = mediaPreview(box.dataset.kind, url);
+        msg.className = 'mt-1 text-xs font-semibold text-emerald-700'; msg.textContent = 'تم الرفع. اضغط «حفظ» لاعتماده.';
+      } catch (err) {
+        if (dlg.open) { msg.className = 'mt-1 text-xs font-semibold text-red-600'; msg.textContent = dbHint(err.message || 'فشل الرفع.') + (/bucket|not found/i.test(err.message || '') ? ' (أنشئ الـ bucket بأوامر SQL أعلى الملف).' : ''); }
+      } finally {
+        state.uploading = false; if (dlg.open) $('#f-save').disabled = false;
+      }
+    });
+
+    $('#f').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (state.uploading || !state.editing) return;
+      const { ent, row, ctx } = state.editing, def = ENT[ent], form = e.target, payload = {}, missing = [];
+      for (const f of def.fields) {
+        const el = form.elements[f.k];
+        let v;
+        if (f.t === 'check') v = el.checked;
+        else if (f.t === 'number') v = el.value === '' ? null : Number(el.value);
+        else { v = el.value.trim(); if (v === '') v = null; }
+        if (f.req && (v === null || v === '')) { say($('#f-msg'), 'الحقل «' + f.l + '» مطلوب.'); el.focus(); return; }
+        if (f.t === 'number' && v !== null && !Number.isFinite(v)) { say($('#f-msg'), 'قيمة رقمية غير صحيحة في «' + f.l + '».'); el.focus(); return; }
+        if (f.t === 'media' && v && !safeSrc(v)) { say($('#f-msg'), 'رابط غير صالح في «' + f.l + '».'); el.focus(); return; }
+        if (f.url && v && !/^https?:\/\/\S+$/i.test(v)) { say($('#f-msg'), 'أدخل رابطاً صحيحاً يبدأ بـ https:// في «' + f.l + '».'); el.focus(); return; }
+        if (row && !(f.k in row)) { if (v !== null && v !== '' && v !== false) missing.push(f.k); continue; }   // column absent from this table
+        payload[f.k] = v;
+      }
+      if (missing.length) { say($('#f-msg'), 'الأعمدة التالية غير موجودة في الجدول: ' + missing.join(', ') + ' — شغّل أوامر SQL الموجودة أعلى ملف admin.html.'); return; }
+      if (ent === 'offers') { if (!payload.currency) payload.currency = 'MAD'; if (!row) payload.service_id = String(ctx.service_id); }
+      const btn = $('#f-save'); btn.disabled = true;
+      const { error } = row
+        ? await sb.from(def.table).update(payload).eq('id', row.id)
+        : await sb.from(def.table).insert([payload]);
+      btn.disabled = false;
+      if (error) { say($('#f-msg'), dbHint(error.message)); return; }
+      dlg.close(); toast(row ? 'تم حفظ التعديلات' : 'تمت الإضافة بنجاح'); loadTab(state.tab);
+    });
+
+    /* ===== INIT ===== */
+    sb.auth.onAuthStateChange((event) => { if (event === 'SIGNED_OUT' && document.body.dataset.step === 'dash') showStep('login'); });
+    route();
+  </script>
+</body>
+</html>
