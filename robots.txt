@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://app.fikra-automation.com/sitemap.xml
