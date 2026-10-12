@@ -1,9 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://app.fikra-automation.com/</loc>
-    <lastmod>2026-10-10</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+    
+    <!-- النسخة الفرنسية (الرئيسية) -->
+    <url>
+        <loc>https://app.fikra-automation.com/</loc>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://app.fikra-automation.com/"/>
+        <xhtml:link rel="alternate" hreflang="ar" href="https://app.fikra-automation.com/ar/"/>
+        <changefreq>weekly</changefreq>
+        <priority>1.0</priority>
+    </url>
+    
+    <!-- النسخة العربية -->
+    <url>
+        <loc>https://app.fikra-automation.com/ar/</loc>
+        <xhtml:link rel="alternate" hreflang="fr" href="https://app.fikra-automation.com/"/>
+        <xhtml:link rel="alternate" hreflang="ar" href="https://app.fikra-automation.com/ar/"/>
+        <changefreq>weekly</changefreq>
+        <priority>0.9</priority>
+    </url>
+
 </urlset>
