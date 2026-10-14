@@ -22,8 +22,10 @@
   <link rel="alternate" hreflang="fr" href="https://app.fikra-automation.com/" />
   <link rel="alternate" hreflang="ar" href="https://app.fikra-automation.com/ar/" />
   <link rel="alternate" hreflang="x-default" href="https://app.fikra-automation.com/" />
-  <link rel="icon" type="image/png" href="logo-mybusiness_fikra-automation.png" />
-  <link rel="apple-touch-icon" href="logo-mybusiness_fikra-automation.png" />
+  <link rel="icon" type="image/png" sizes="48x48" href="/icon-48.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+  <link ret="apple-touch-icon" sizes="180x180" href="/icon-192.png" />
+  <meta property="og:image" content="https://app.fikra-automation.com/icon-512.png" />
 
   <!-- ===== SEO: Open Graph (Facebook, WhatsApp, LinkedIn) ===== -->
   <meta property="og:type" content="website" />
@@ -232,8 +234,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Cairo:wght@400;600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <script src="https://cdn.tailwindcss.com" defer></script>
   <script>
     tailwind.config = {
       theme: {
@@ -1570,16 +1572,27 @@
 
     async function trackVisit() {
       if (!sb) return;
-      let first = true;
-      try { first = !sessionStorage.getItem(CONFIG.visitsKey); } catch (e) { /* storage unavailable */ }
+
       try {
-        const { data, error } = await withTimeout(sb.rpc(first ? 'register_visit' : 'get_visits'), CONFIG.supabase.timeoutMs);
-        if (error) throw error;
-        if (first) { try { sessionStorage.setItem(CONFIG.visitsKey, '1'); } catch (e) { /* ignore */ } }
-        const n = Number(data);
-        if (Number.isFinite(n)) state.visits = n;
-      } catch (err) { console.warn('Could not register the visit', err); }
-    }
+
+        const hasVisitedSession =sessionStorage.getItem(CONFIG.visitsKey);
+        if (!hasVisitedSession) {
+          const{ data, error } = await withTimeout(sb.rpc('register_visit'), CONFIG.supabase.timeoutMs);
+          if (error) throw error;
+          sessionStorage.setItem(CONFIG.visitsKey, '1');
+          const n = Number(data);
+          if (Number.isFinite(n)) {
+            state.visits = n;
+            if (modalState.serviceId !== null) showCount(n, true);
+          }
+        } else {
+          await refreshVisits();
+        }
+      } catch (err) {
+        console.warn('Could not register or refresh the visit', err);
+      }
+    }    
+      
 
     function openServiceModal(id, opts) {
       const service = findService(id);
