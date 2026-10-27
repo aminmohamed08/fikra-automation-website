@@ -232,8 +232,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Cairo:wght@400;600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-  <script src="https://cdn.tailwindcss.com" defer></script>
+  <!-- FIX: these two scripts must load synchronously (no "defer"). The inline Tailwind config and the Supabase client
+       below run before deferred scripts would be available, which broke the colors, the layout and every data call. -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -449,7 +451,7 @@
   <header class="sticky top-0 z-50 border-b border-brand-light bg-white/90 backdrop-blur">
     <nav class="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-4" aria-label="التنقل الرئيسي" data-i18n-aria="navLabel">
       <a href="#home" dir="ltr" class="flex items-center gap-2.5 font-display text-xl font-extrabold tracking-tight" aria-label="Fikra Automation">
-        <img src="/logo-mybusiness_fikra-automation.png" alt="Fikra Automation" width="36" height="36" class="h-9 w-auto object-contain">
+        <img src="/logo-mybusiness_fikra-automation.png" alt="Fikra Automation" width="36" height="36" class="h-9 w-auto object-contain" onerror="this.style.display='none'">
         <span>Fikra<span class="font-medium text-brand"> Automation</span></span>
       </a>
       <ul id="nav-desktop" class="hidden items-center gap-8 text-sm font-medium md:flex"></ul>
@@ -1057,9 +1059,15 @@
     const fb = { status: 'idle', items: [], panel: 'closed', consent: false, draft: '', sending: false, notice: '', error: '' };
     const certState = { id: null };
 
-    const sb = (window.supabase && window.supabase.createClient)
-      ? window.supabase.createClient(CONFIG.supabase.url, CONFIG.supabase.anonKey)
-      : null;
+    let sb = null;
+    try {
+      sb = (window.supabase && window.supabase.createClient)
+        ? window.supabase.createClient(CONFIG.supabase.url, CONFIG.supabase.anonKey)
+        : null;
+    } catch (err) {
+      console.warn('Could not create the Supabase client', err);
+      sb = null;
+    }
 
     const withTimeout = (promise, ms) => Promise.race([
       Promise.resolve(promise),

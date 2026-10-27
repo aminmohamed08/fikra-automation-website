@@ -24,8 +24,7 @@
   <link rel="alternate" hreflang="x-default" href="https://app.fikra-automation.com/" />
   <link rel="icon" type="image/png" sizes="48x48" href="/icon-48.png" />
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
-  <link ret="apple-touch-icon" sizes="180x180" href="/icon-192.png" />
-  <meta property="og:image" content="https://app.fikra-automation.com/icon-512.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/icon-192.png" />
 
   <!-- ===== SEO: Open Graph (Facebook, WhatsApp, LinkedIn) ===== -->
   <meta property="og:type" content="website" />
@@ -234,8 +233,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Cairo:wght@400;600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-  <script src="https://cdn.tailwindcss.com" defer></script>
+  <!-- These two scripts must NOT be deferred: the inline scripts below need `tailwind` and `window.supabase` immediately -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -451,7 +451,7 @@
   <header class="sticky top-0 z-50 border-b border-brand-light bg-white/90 backdrop-blur">
     <nav class="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-4" aria-label="Navigation principale" data-i18n-aria="navLabel">
       <a href="#home" dir="ltr" class="flex items-center gap-2.5 font-display text-xl font-extrabold tracking-tight" aria-label="Fikra Automation">
-        <img src="logo-mybusiness_fikra-automation.png" alt="Fikra Automation" width="36" height="36" class="h-9 w-auto object-contain">
+        <img src="logo-mybusiness_fikra-automation.png" alt="Fikra Automation" width="36" height="36" class="h-9 w-auto object-contain" onerror="this.style.display='none'">
         <span>Fikra<span class="font-medium text-brand"> Automation</span></span>
       </a>
       <ul id="nav-desktop" class="hidden items-center gap-8 text-sm font-medium md:flex"></ul>
@@ -1572,14 +1572,13 @@
 
     async function trackVisit() {
       if (!sb) return;
-
       try {
-
-        const hasVisitedSession =sessionStorage.getItem(CONFIG.visitsKey);
-        if (!hasVisitedSession) {
-          const{ data, error } = await withTimeout(sb.rpc('register_visit'), CONFIG.supabase.timeoutMs);
+        let alreadyCounted = null;
+        try { alreadyCounted = sessionStorage.getItem(CONFIG.visitsKey); } catch (e) { /* storage unavailable */ }
+        if (!alreadyCounted) {
+          const { data, error } = await withTimeout(sb.rpc('register_visit'), CONFIG.supabase.timeoutMs);
           if (error) throw error;
-          sessionStorage.setItem(CONFIG.visitsKey, '1');
+          try { sessionStorage.setItem(CONFIG.visitsKey, '1'); } catch (e) { /* storage unavailable */ }
           const n = Number(data);
           if (Number.isFinite(n)) {
             state.visits = n;
@@ -1591,8 +1590,7 @@
       } catch (err) {
         console.warn('Could not register or refresh the visit', err);
       }
-    }    
-      
+    }
 
     function openServiceModal(id, opts) {
       const service = findService(id);
