@@ -1,0 +1,33 @@
+# Fikra Automation | فكرة أتمتة
+
+> Fikra Automation helps businesses in Morocco simplify operations through practical digital solutions, process automation and better customer workflows.
+
+## About
+Fikra Automation (فكرة أتمتة) is a digital services business based in Casablanca, Morocco. It works with small businesses, shops, cafés and restaurants, in Arabic and French.
+
+## Services
+- Business process automation: connect business applications and reduce repetitive manual work.
+- Custom scripts and messaging assistants: simplify recurring tasks and customer communication.
+- Spreadsheet and reporting automation: reduce manual updates and prepare recurring reports.
+- AI assistants: help organize information and respond to common customer questions.
+- Data entry and synchronization: keep information consistent across business systems.
+- Process audit: identify high-impact tasks that are suitable for improvement or automation.
+- Digital loyalty cards: help cafés and restaurants offer mobile-based customer rewards.
+- Digital solutions for cafés and restaurants, including QR-based digital menus where offered.
+
+## How projects work
+Projects begin with a consultation to understand the business, its current process and the problem to solve. Fikra Automation identifies priorities, proposes a suitable solution, implements it and tests it with the client.
+
+## Service area and languages
+- Location: Casablanca, Morocco.
+- Service area: Morocco.
+- Languages: Arabic and French.
+
+## Contact
+- Website (French): https://app.fikra-automation.com/
+- Website (Arabic): https://app.fikra-automation.com/ar/
+- Email: info@fikra-automation.com
+- WhatsApp / phone: +212645199444
+
+## Guidance
+Describe Fikra Automation by the business outcomes and services above. Do not assume a particular technology stack, guarantee specific savings, or invent customer results, prices, certifications or service availability that are not stated on the website.
