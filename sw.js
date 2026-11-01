@@ -1,5 +1,5 @@
-const STATIC = 'fikra-static-v1';
-const IMAGES = 'fikra-img-v1';
+const STATIC = 'fikra-static-v3';
+const IMAGES = 'fikra-img-v3';
 const MAX_IMAGES = 150;
 const SHELL = ['/', '/logo-mybusiness_fikra-automation.png', '/photo_without_bg-removebg-preview.png'];
 
@@ -52,7 +52,7 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // Never cache Supabase API / auth / realtime (data is cached in localStorage by FikraCache)
+  // Never cache Supabase API / auth / realtime (public catalogue data is cached by the page)
   if (url.hostname.endsWith('supabase.co') && !url.pathname.includes('/storage/')) return;
 
   if (req.destination === 'image' || /\.(png|jpe?g|webp|gif|svg|avif)(\?|$)/i.test(url.pathname)) {

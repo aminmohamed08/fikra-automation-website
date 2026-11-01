@@ -167,6 +167,7 @@
           <button id="tab-certs" role="tab" data-tab="certs" aria-controls="list" class="tab-btn">الشواهد والشهادات</button>
           <button id="tab-career" role="tab" data-tab="career" aria-controls="list" class="tab-btn">المسار والخبرات</button>
           <button id="tab-faqs" role="tab" data-tab="faqs" aria-controls="list" class="tab-btn">الأسئلة الشائعة</button>
+          <button id="tab-leads" role="tab" data-tab="leads" aria-controls="list" class="tab-btn">طلبات الاستشارة</button>
         </nav>
       </div>
     </header>
@@ -282,6 +283,7 @@
           { k: 'icon', l: 'الأيقونة', t: 'select', opts: () => ICON_KEYS.map((k) => [k, k]) },
           { k: 'sort_order', l: 'الترتيب', t: 'number', def: () => nextOrder(state.services) },
           { k: 'image_url', l: 'صورة الخدمة (تظهر على البطاقة وفي النافذة؛ يُفضَّل 1280×720 بنسبة 16:9)', t: 'media', kind: 'image', wide: 1 },
+          { k: 'card_color', l: 'لون بطاقة الخدمة (HEX مثل #1D4ED8)', t: 'text', def: '#1D4ED8', ltr: 1 },
           { k: 'video_url', l: 'فيديو توضيحي (رابط YouTube أو ملف mp4 / webm)', t: 'media', kind: 'video', wide: 1 },
           { k: 'is_active', l: 'ظاهرة للزوار', t: 'check', def: true },
         ],
@@ -297,6 +299,8 @@
           { k: 'features_fr', l: 'المميزات (فرنسي): ميزة في كل سطر', t: 'area', ltr: 1 },
           { k: 'price', l: 'السعر (فارغ = حسب الطلب)', t: 'number' },
           { k: 'currency', l: 'العملة', t: 'text', def: 'MAD', ltr: 1 },
+          { k: 'billing_period', l: 'طريقة الأداء', t: 'select', opts: () => [['one_time', 'دفعة واحدة'], ['monthly', 'شهري'], ['yearly', 'سنوي']], def: 'one_time' },
+          { k: 'is_popular', l: 'إظهار شارة الأكثر طلباً', t: 'check', def: false },
           { k: 'sort_order', l: 'الترتيب', t: 'number', def: (ctx) => nextOrder(offersOf(ctx.service_id)) },
           { k: 'is_active', l: 'ظاهر للزوار', t: 'check', def: true },
         ],
@@ -328,6 +332,7 @@
           { k: 'is_active', l: 'ظاهرة للزوار', t: 'check', def: true },
         ],
       },
+      leads: { table: 'leads', fields: [] },
       faqs: {
         table: 'service_faqs', newTitle: 'سؤال جديد', editTitle: 'تعديل السؤال',
         fields: [
@@ -347,6 +352,7 @@
       certs:    { slug: 'certificates', title: 'الشواهد والشهادات', sub: 'الشهادات والشارات التي تعرضها في قسم الشهادات بالموقع.', add: '+ إضافة شهادة', load: ['certs'] },
       career:   { slug: 'career', title: 'المسار والخبرات', sub: 'محطات مسارك الدراسي والمهني ومشاريعك.', add: '+ إضافة محطة', load: ['career'] },
       faqs:     { slug: 'faqs', title: 'الأسئلة الشائعة', sub: 'الأسئلة التي تظهر للزوار وتُستعمل في ترميز FAQPage لمحركات البحث.', add: '+ إضافة سؤال', load: ['faqs'] },
+      leads:    { slug: 'leads', title: 'طلبات الخدمات والاستشارات', sub: 'جميع الطلبات الواردة من نموذج الموقع، بما فيها طلبات الخدمات والاستشارات. هذه البيانات للعرض فقط ولا تُخزَّن في الكاش.', add: '—', load: ['leads'] },
     };
     const TAB_KEYS = Object.keys(TABS);
 
@@ -356,7 +362,7 @@
     const show = (el, on) => el.classList.toggle('hidden', !on);
     const say = (el, msg) => { el.textContent = msg || ''; show(el, !!msg); };
     const state = {
-      tab: 'services', services: [], offers: [], certs: [], career: [], faqs: [], loaded: {}, open: new Set(), loading: false,
+      tab: 'services', services: [], offers: [], certs: [], career: [], faqs: [], leads: [], loaded: {}, open: new Set(), loading: false,
       editing: null, factorId: null, fails: 0, lockUntil: 0, idle: 0, uploading: false,
     };
 
@@ -456,7 +462,7 @@
     async function signOut() {
       stopIdle();
       await sb.auth.signOut();
-      Object.assign(state, { services: [], offers: [], certs: [], career: [], faqs: [], loaded: {} });
+      Object.assign(state, { services: [], offers: [], certs: [], career: [], faqs: [], leads: [], loaded: {} });
       state.open.clear();
       $('#list').innerHTML = '';
       showStep('login');
@@ -497,6 +503,7 @@
       $('#tab-title').textContent = meta.title;
       $('#tab-sub').textContent = meta.sub;
       $('#add-btn').textContent = meta.add;
+      $('#add-btn').classList.toggle('hidden', key === 'leads');
       say($('#dash-msg'), '');
       if (state.loaded[key]) { render(); swapAnim(); } else loadTab(key);
     }
@@ -674,14 +681,26 @@
       certs: 'لا توجد شهادات بعد. أضف أول شهادة.',
       career: 'لا توجد محطات بعد. أضف أول محطة في مسارك.',
       faqs: 'لا توجد أسئلة بعد. أضف أول سؤال.',
+      leads: 'لا توجد طلبات خدمات أو استشارات واردة حالياً.',
     };
+
+    function renderLeadRows(rows) {
+      return rows.map((r) => `<li class="rounded-2xl border border-brand-light bg-white p-4 shadow-sm sm:p-5">
+        <div class="flex flex-wrap items-start justify-between gap-3"><div class="min-w-0">
+          <p class="text-lg font-extrabold">${esc(r.full_name || '—')}</p>
+          <p class="mt-1 text-sm text-slate-600">${esc(r.business_name || '—')} · ${esc(r.service_type || '—')}</p>
+        </div><span class="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800">${esc(r.status || 'new')}</span></div>
+        <div class="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm"><a class="font-bold text-brand underline" dir="ltr" href="tel:${esc(String(r.phone || '').replace(/[^+0-9]/g, ''))}">${esc(r.phone || '—')}</a><time class="text-slate-500">${esc(r.created_at ? new Date(r.created_at).toLocaleString('fr-FR') : '')}</time></div>
+        ${r.message ? `<p class="mt-3 whitespace-pre-wrap break-words rounded-xl bg-slate-50 p-3 text-sm text-slate-700">${esc(r.message)}</p>` : ''}
+      </li>`).join('');
+    }
 
     function render() {
       const key = state.tab, rows = state[key];
       const empty = `<li class="rounded-2xl border border-dashed border-brand/30 bg-white p-8 text-center text-slate-500">${EMPTY[key]}</li>`;
       $('#list').innerHTML = state.loading && !state.loaded[key]
         ? '<li class="rounded-2xl bg-white p-8 text-center text-slate-500">جارٍ التحميل…</li>'
-        : (rows.length ? rows.map((r, i, arr) => key === 'services' ? serviceCard(r, i, arr) : flatCard(key, r, i, arr)).join('') : empty);
+        : (rows.length ? (key === 'leads' ? renderLeadRows(rows) : rows.map((r, i, arr) => key === 'services' ? serviceCard(r, i, arr) : flatCard(key, r, i, arr)).join('')) : empty);
     }
 
     /* ===== ACTIONS ===== */
